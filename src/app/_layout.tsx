@@ -161,6 +161,11 @@ export default function RootLayout() {
           tabBarIcon: ({ color, size }) => <Download size={size || 20} color={color} />,
         }}
       />
+      {/* Route cachée : pas d'onglet, juste une page de callback OAuth */}
+      <Tabs.Screen
+        name="auth/callback"
+        options={{ href: null, headerShown: false }}
+      />
     </Tabs>
   );
 }
