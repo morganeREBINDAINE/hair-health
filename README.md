@@ -1,56 +1,79 @@
-# Welcome to your Expo app 👋
+# Hair & Health Tracker (Suivi Santé & Cheveux) 🌿💇‍♀️
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Application mobile développée avec **React Native (Expo SDK 57)**, **TypeScript**, **Supabase** et **Expo Router**.
 
-## Get started
+---
 
-1. Install dependencies
+## 📱 Fonctionnalités Clés
 
-   ```bash
-   npm install
-   ```
+1. **Saisie Journalière Complète (`/entry`)** :
+   - Évaluation chiffrée de la chute de cheveux (ex: 30, 80, 150...).
+   - Note d'anxiété sur échelle visuelle de 0 à 10.
+   - Suivi des symptômes clés : « Boule dans la gorge » et « Grosse dispute ».
+   - Soins capillaires : Coupes (avec notes), Lavages (sélecteur : Bébé, Sans sulfate, Avec sulfate, Traitant) et pose de Henné.
+   - Compléments & Médicaments :
+     - Pré-cochés par défaut : Fer bisglycinate + Vitamine C, Magnésium, Vitamine B12.
+     - Sélecteurs de dosage : Forcapil (1 ou 2 comprimés), Iode, Sélénium, Myo-Inositol.
+     - Ajout à la volée de nouveaux compléments personnalisés sauvegardés pour le futur.
 
-2. Start the app
+2. **Calendrier Interactif (`/calendar`)** :
+   - Vue calendrier mensuelle fluide en français.
+   - Pastilles / Icônes sous chaque jour :
+     - 💊 Médicaments pris
+     - 💇‍♀️ Coupes
+     - 🧴 Shampoings
+     - 🌿 Henné
+     - ⚡ Stress / Disputes
+     - 🩸 Prises de sang
+   - Barre de filtres supérieure pour afficher/masquer chaque catégorie selon vos préférences.
+   - Fiche résumé détaillée au clic sur n'importe quel jour avec bouton d'accès rapide pour modifier.
 
-   ```bash
-   npx expo start
-   ```
+3. **Normes Fonctionnelles & Bilans Sanguins (`/norms`)** :
+   - Onglet avec icône seringue (💉) dédié à la santé des cheveux.
+   - Définition des seuils optimaux (Ferritine > 70 µg/L, TSH 1.0-2.0, T3, T4, Anti-TPO, NFS, etc.).
+   - Possibilité de modifier les intervalles min/max et d'ajouter de nouvelles molécules avec leur unité.
+   - Saisie et historique des prises de sang avec alertes colorées automatiques (🟢 Optimal, 🔴 En dehors).
 
-In the output, you'll find options to open the app in a
+4. **Tableau de Bord & Statistiques (`/index`)** :
+   - Cartes KPI : moyenne de chute récente, taux d'observance des compléments, score d'anxiété moyen.
+   - Graphique de suivi de la chute de cheveux.
+   - Graphique de corrélation anxiété / stress.
+   - Bilan de la dernière prise de sang.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+5. **Export Excel (.xlsx) & Partage (`/export`)** :
+   - Sélection de la durée : 7 jours, 30 jours, 3 mois ou tout l'historique.
+   - Sélection des catégories à inclure via cases à cocher.
+   - Génération instantanée du fichier `.xlsx` multi-onglets et ouverture de la feuille de partage du smartphone (Email, WhatsApp, Drive, Fichiers...).
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+6. **Sauvegarde Cloud Supabase & Google OAuth (`/export`)** :
+   - Fonctionne à 100% hors-ligne avec persistance locale instantanée (`AsyncStorage`).
+   - Synchronisation automatique avec Supabase lors de la connexion Google pour ne jamais perdre vos données lors d'un changement de téléphone.
 
-## Get a fresh project
+---
 
-When you're ready, run:
+## 🚀 Démarrage Rapide
 
+### 1. Lancer l'application
+Dans le dossier du projet :
 ```bash
-npm run reset-project
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Tester sur smartphone avec Expo Go
+- Installez l'application **Expo Go** sur votre téléphone (App Store ou Google Play).
+- Scannez le QR Code affiché dans le terminal (sur Android avec l'app Expo Go, sur iOS avec l'appareil photo).
 
-### Other setup steps
+---
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## 🗄️ Configuration de Supabase (Optionnel pour la synchronisation cloud)
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. Créez un projet sur [supabase.com](https://supabase.com).
+2. Rendez-vous dans **SQL Editor** sur Supabase.
+3. Copiez-collez l'intégralité du fichier [`supabase_setup.sql`](./supabase_setup.sql) et cliquez sur **Run**.
+4. Dans **Authentication > Providers > Google**, activez Google OAuth avec votre Client ID Google.
+5. Créez un fichier `.env` à la racine :
+   ```env
+   EXPO_PUBLIC_SUPABASE_URL=https://votre-projet.supabase.co
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=votre-cle-anon
+   ```
+   *(Vous pouvez également renseigner ces clés directement dans l'onglet **Export & Compte** de l'application sans recompiler).*
