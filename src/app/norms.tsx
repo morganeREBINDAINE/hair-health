@@ -1,36 +1,105 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Modal,
-  Alert,
-  SafeAreaView,
-} from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { Toast } from '../lib/toast';
+import { View, StyleSheet, Pressable, ScrollView, TextInput, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import {
   Syringe,
   Plus,
-  Edit2,
+  Pencil,
   Trash2,
-  CheckCircle2,
-  AlertCircle,
-  Calendar,
-  Save,
+  CircleCheck,
+  TriangleAlert,
+  Check,
   X,
-  FileText,
+  SlidersHorizontal,
+  Droplet,
+  FlaskConical,
+  CalendarDays,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  ChevronLeft,
 } from 'lucide-react-native';
-import { Colors } from '../constants/theme';
 import { LabMarkerDefinition, LabTest } from '../types';
 import { StorageService } from '../services/storageService';
+import { Calendar } from 'react-native-calendars';
+import { Palette, Spacing, DockClearance, Radius, Type } from '../constants/theme';
+import {
+  AppText,
+  Badge,
+  Card,
+  IconCircle,
+  PillButton,
+  ScreenHeader,
+  Segmented,
+  inputStyle,
+  type BadgeTone,
+} from '../components/ui';
+import { frDate, todayIso } from '../lib/dates';
+import '../lib/calendarLocale';
+
+type Status = 'low' | 'high' | 'ok' | 'none';
+type PickerStep = 'year' | 'month' | 'day';
+
+const MONTHS_FR = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+];
+
+function statusOf(value: number | undefined, m: LabMarkerDefinition): Status {
+  if (value === undefined) return 'none';
+  if (value < m.minFunctional) return 'low';
+  if (value > m.maxFunctional) return 'high';
+  return 'ok';
+}
+
+const STATUS_BADGE: Record<Status, { label: string; tone: BadgeTone }> = {
+  ok: { label: 'Optimal', tone: 'limeSoft' },
+  low: { label: 'Trop bas', tone: 'coralSoft' },
+  high: { label: 'Trop haut', tone: 'amber' },
+  none: { label: 'Sans valeur', tone: 'neutral' },
+};
+
+/** Jauge horizontale : zone basse / zone optimale / zone haute + curseur. */
+function RangeTrack({ value, m }: { value?: number; m: LabMarkerDefinition }) {
+  const span = Math.max(m.maxFunctional - m.minFunctional, 0.0001);
+  const lo = Math.max(0, m.minFunctional - span * 0.8);
+  const hi = m.maxFunctional + span * 0.8;
+  const pct = (x: number) => ((Math.min(Math.max(x, lo), hi) - lo) / (hi - lo)) * 100;
+  const minPct = pct(m.minFunctional);
+  const maxPct = pct(m.maxFunctional);
+  const fmt = (x: number) => String(Math.round(x * 10) / 10);
+
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={styles.track}>
+        <View style={[styles.zone, { left: 0, width: `${minPct}%`, backgroundColor: Palette.coralSoft }]} />
+        <View
+          style={[styles.zone, { left: `${minPct}%`, width: `${maxPct - minPct}%`, backgroundColor: Palette.lime }]}
+        />
+        <View style={[styles.zone, { left: `${maxPct}%`, right: 0, backgroundColor: Palette.amberSoft }]} />
+        {value !== undefined && <View style={[styles.needle, { left: `${pct(value)}%` }]} />}
+      </View>
+      <View style={styles.rowBetween}>
+        <AppText variant="labelSm" color={Palette.textMuted}>
+          {fmt(lo)}
+        </AppText>
+        <AppText variant="labelSm" color={Palette.primary}>
+          Idéal : {m.minFunctional} – {m.maxFunctional}
+        </AppText>
+        <AppText variant="labelSm" color={Palette.textMuted}>
+          {fmt(hi)}
+        </AppText>
+      </View>
+    </View>
+  );
+}
 
 export default function NormsScreen() {
   const [activeTab, setActiveTab] = useState<'norms' | 'tests'>('norms');
+  const [showHidden, setShowHidden] = useState(false);
   const [markers, setMarkers] = useState<LabMarkerDefinition[]>([]);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Modal Ajout/Modification de Norme
   const [showMarkerModal, setShowMarkerModal] = useState(false);
@@ -43,31 +112,31 @@ export default function NormsScreen() {
 
   // Modal Saisie de Prise de Sang
   const [showTestModal, setShowTestModal] = useState(false);
-  const [testDate, setTestDate] = useState(new Date().toISOString().slice(0, 10));
+  const [editingTest, setEditingTest] = useState<LabTest | null>(null);
+  const [testDate, setTestDate] = useState(todayIso());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pickerStep, setPickerStep] = useState<PickerStep>('year');
+  const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
+  const [pickerMonth, setPickerMonth] = useState(new Date().getMonth());
   const [testNotes, setTestNotes] = useState('');
   const [testValues, setTestValues] = useState<Record<string, string>>({});
-
-  const colors = Colors.light;
+  const [saving, setSaving] = useState(false);
 
   const loadAll = useCallback(async () => {
-    setLoading(true);
     try {
-      const ms = await StorageService.getLabMarkers();
-      const ts = await StorageService.getLabTests();
-      setMarkers(ms);
-      setLabTests(ts);
+      setMarkers(await StorageService.getLabMarkers());
+      setLabTests(await StorageService.getLabTests());
     } catch (e) {
       console.error('Erreur chargement normes:', e);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+  useFocusEffect(
+    useCallback(() => {
+      loadAll();
+    }, [loadAll])
+  );
 
-  // Ouvrir modal de modification de norme
   const handleEditMarker = (marker: LabMarkerDefinition) => {
     setEditingMarkerId(marker.id);
     setMarkerName(marker.name);
@@ -86,6 +155,36 @@ export default function NormsScreen() {
     setMarkerUnit('µg/L');
     setMarkerDesc('');
     setShowMarkerModal(true);
+  };
+
+  const handleToggleMarkerHidden = async (marker: LabMarkerDefinition) => {
+    try {
+      const updated = { ...marker, hidden: !marker.hidden };
+      setMarkers(await StorageService.saveLabMarker(updated));
+    } catch {
+      Toast.error('Connexion requise pour modifier');
+    }
+  };
+
+  const handleDeleteMarker = (marker: LabMarkerDefinition) => {
+    Alert.alert(
+      'Supprimer cette molécule ?',
+      `« ${marker.name} » sera définitivement supprimée. Les valeurs déjà enregistrées dans tes prises de sang seront conservées.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setMarkers(await StorageService.deleteLabMarker(marker.id));
+            } catch {
+              Toast.error('Connexion requise pour supprimer');
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleSaveMarker = async () => {
@@ -111,46 +210,72 @@ export default function NormsScreen() {
       displayOrder: markers.length + 1,
     };
 
-    const updated = await StorageService.saveLabMarker(newMarker);
-    setMarkers(updated);
-    setShowMarkerModal(false);
+    setSaving(true);
+    try {
+      setMarkers(await StorageService.saveLabMarker(newMarker));
+      setShowMarkerModal(false);
+    } catch {
+      Toast.error('Connexion requise pour enregistrer');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  // Enregistrer une prise de sang
   const handleOpenAddTest = () => {
-    setTestDate(new Date().toISOString().slice(0, 10));
+    setEditingTest(null);
+    setTestDate(todayIso());
+    setShowDatePicker(false);
     setTestNotes('');
     setTestValues({});
     setShowTestModal(true);
   };
 
+  const handleEditTest = (test: LabTest) => {
+    setEditingTest(test);
+    setTestDate(test.date);
+    setShowDatePicker(false);
+    setTestNotes(test.notes || '');
+    setTestValues(Object.fromEntries(Object.entries(test.values).map(([id, v]) => [id, String(v)])));
+    setShowTestModal(true);
+  };
+
   const handleSaveTest = async () => {
     const numericValues: Record<string, number> = {};
+    if (editingTest) {
+      Object.entries(editingTest.values).forEach(([id, v]) => {
+        if (!markers.some((m) => m.id === id)) numericValues[id] = v;
+      });
+    }
     Object.entries(testValues).forEach(([markerId, valStr]) => {
       if (valStr.trim() !== '') {
         const parsed = parseFloat(valStr.replace(',', '.'));
-        if (!isNaN(parsed)) {
-          numericValues[markerId] = parsed;
-        }
+        if (!isNaN(parsed)) numericValues[markerId] = parsed;
       }
     });
 
     if (Object.keys(numericValues).length === 0) {
-      Alert.alert('Attention', 'Veuillez saisir au moins une valeur d’analyse.');
+      Alert.alert('Attention', "Veuillez saisir au moins une valeur d'analyse.");
       return;
     }
 
     const test: LabTest = {
-      id: `test-${Date.now()}`,
+      id: editingTest?.id ?? `test-${Date.now()}`,
       date: testDate,
       notes: testNotes.trim(),
       values: numericValues,
     };
 
-    const updated = await StorageService.saveLabTest(test);
-    setLabTests(updated);
-    setShowTestModal(false);
-    Alert.alert('Succès', 'Bilan de prise de sang enregistré.');
+    setSaving(true);
+    try {
+      setLabTests(await StorageService.saveLabTest(test));
+      setShowTestModal(false);
+      Alert.alert('Succès', editingTest ? 'Bilan de prise de sang modifié.' : 'Bilan de prise de sang enregistré.');
+      setEditingTest(null);
+    } catch {
+      Toast.error('Connexion requise pour enregistrer');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeleteTest = async (id: string) => {
@@ -160,617 +285,721 @@ export default function NormsScreen() {
         text: 'Supprimer',
         style: 'destructive',
         onPress: async () => {
-          const updated = await StorageService.deleteLabTest(id);
-          setLabTests(updated);
+          try {
+            setLabTests(await StorageService.deleteLabTest(id));
+          } catch {
+            Toast.error('Connexion requise pour supprimer');
+          }
         },
       },
     ]);
   };
 
+  // Dernière valeur connue pour chaque analyse
+  const testsDesc = [...labTests].sort((a, b) => b.date.localeCompare(a.date));
+  const latest = new Map<string, { value: number; date: string }>();
+  testsDesc.forEach((t) => {
+    Object.entries(t.values).forEach(([id, v]) => {
+      if (!latest.has(id)) latest.set(id, { value: v, date: t.date });
+    });
+  });
+  const visibleMarkers = markers.filter((m) => !m.hidden);
+  const hiddenCount = markers.filter((m) => m.hidden).length;
+  const withStatus = visibleMarkers.map((m) => ({ m, last: latest.get(m.id), status: statusOf(latest.get(m.id)?.value, m) }));
+  const hiddenWithStatus = markers.filter((m) => m.hidden).map((m) => ({ m, last: latest.get(m.id), status: statusOf(latest.get(m.id)?.value, m) }));
+  const markerMap = new Map(markers.map((m) => [m.id, m]));
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* Contrôle segmenté des onglets */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          onPress={() => setActiveTab('norms')}
-          style={[styles.tabButton, activeTab === 'norms' && styles.tabButtonActive]}>
-          <Syringe size={16} color={activeTab === 'norms' ? '#0F172A' : '#64748B'} />
-          <Text style={[styles.tabButtonText, activeTab === 'norms' && styles.tabButtonTextActive]}>
-            Normes Capillaires
-          </Text>
-        </TouchableOpacity>
+    <View style={styles.screen}>
+      <ScreenHeader title="Normes bilan" />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Contexte */}
+        <View style={{ gap: 14 }}>
+          <AppText variant="bodyMd" color={Palette.textMuted}>
+            Valeurs cibles optimales pour stimuler le follicule et soutenir la repousse — souvent plus exigeantes que
+            les normes de laboratoire.
+          </AppText>
+          <PillButton label="Saisir une prise de sang" icon={ArrowRight} variant="lime" onPress={handleOpenAddTest} />
+          <Segmented
+            options={[
+              { id: 'norms', label: 'Normes' },
+              { id: 'tests', label: `Mes prises de sang (${labTests.length})` },
+            ]}
+            value={activeTab}
+            onChange={setActiveTab}
+            size="lg"
+          />
+        </View>
 
-        <TouchableOpacity
-          onPress={() => setActiveTab('tests')}
-          style={[styles.tabButton, activeTab === 'tests' && styles.tabButtonActive]}>
-          <FileText size={16} color={activeTab === 'tests' ? '#0F172A' : '#64748B'} />
-          <Text style={[styles.tabButtonText, activeTab === 'tests' && styles.tabButtonTextActive]}>
-            Mes Prises de Sang ({labTests.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.content}>
         {activeTab === 'norms' ? (
-          /* VUE 1 : NORMES FONCTIONNELLES */
-          <View>
-            <View style={styles.introBox}>
-              <Text style={styles.introTitle}>Normes fonctionnelles idéales pour les cheveux</Text>
-              <Text style={styles.introText}>
-                Ces seuils correspondent aux plages fonctionnelles optimales pour la régénération et la limitation de la chute (souvent plus exigeantes que les normes laboratoires standard).
-              </Text>
-            </View>
+          <>
+            {withStatus.length === 0 && (
+              <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 28 }}>
+                <IconCircle icon={FlaskConical} size={48} />
+                <AppText variant="bodyMd" color={Palette.textMuted} style={{ textAlign: 'center' }}>
+                  Aucune analyse dans cette catégorie.
+                </AppText>
+              </Card>
+            )}
 
-            <TouchableOpacity style={styles.addButton} onPress={handleOpenAddMarker}>
-              <Plus size={18} color="#FFF" />
-              <Text style={styles.addButtonText}>Ajouter une nouvelle analyse / molécule</Text>
-            </TouchableOpacity>
+            {withStatus.map(({ m, last, status }) => {
+              const badge = STATUS_BADGE[status];
+              const alert = status === 'low' || status === 'high';
+              return (
+                <Card
+                  key={m.id}
+                  onPress={() => router.push({ pathname: '/marker/[id]', params: { id: m.id } })}
+                  style={[{ gap: 16 }, alert && { borderWidth: 1, borderColor: Palette.coralSoft }]}>
+                  <View style={styles.rowBetweenTop}>
+                    <View style={styles.inlineLg}>
+                      <IconCircle
+                        icon={Droplet}
+                        size={44}
+                        bg={alert ? Palette.coralSoft : Palette.limeSoft}
+                        color={alert ? Palette.coralDeep : Palette.primary}
+                      />
+                      <View style={{ flexShrink: 1 }}>
+                        <AppText variant="headlineSm" style={{ fontSize: 17 }}>
+                          {m.name}
+                        </AppText>
+                        {m.description ? (
+                          <AppText variant="bodySm" color={Palette.textMuted} numberOfLines={2}>
+                            {m.description}
+                          </AppText>
+                        ) : null}
+                      </View>
+                    </View>
+                    <Badge
+                      label={badge.label}
+                      tone={badge.tone}
+                      icon={status === 'ok' ? CircleCheck : alert ? TriangleAlert : undefined}
+                    />
+                  </View>
 
-            {markers.map((marker) => (
-              <View key={marker.id} style={styles.normCard}>
-                <View style={styles.normCardHeader}>
-                  <View style={styles.normTitleContainer}>
-                    <Text style={styles.normName}>{marker.name}</Text>
-                    <View style={styles.rangeBadge}>
-                      <Text style={styles.rangeBadgeText}>
-                        Idéal : {marker.minFunctional} – {marker.maxFunctional} {marker.unit}
-                      </Text>
+                  <View style={styles.metricRow}>
+                    <View style={styles.metricValue}>
+                      <AppText variant="metric">{last ? last.value : '–'}</AppText>
+                      <AppText variant="labelMd" color={Palette.textMuted}>
+                        {m.unit}
+                      </AppText>
+                    </View>
+                    <View style={{ alignItems: 'flex-end' }}>
+                      <AppText variant="labelSm" color={Palette.textMuted}>
+                        Cible fonctionnelle
+                      </AppText>
+                      <AppText variant="labelMd">
+                        {m.minFunctional} – {m.maxFunctional} {m.unit}
+                      </AppText>
                     </View>
                   </View>
-                  <TouchableOpacity
-                    style={styles.editIconBtn}
-                    onPress={() => handleEditMarker(marker)}>
-                    <Edit2 size={16} color="#0284C7" />
-                  </TouchableOpacity>
-                </View>
 
-                {marker.description ? (
-                  <Text style={styles.normDesc}>{marker.description}</Text>
-                ) : null}
+                  <RangeTrack value={last?.value} m={m} />
+
+                  <View style={[styles.rowBetween, styles.cardFooter]}>
+                    <AppText variant="bodySm" color={Palette.textMuted} style={{ flexShrink: 1 }}>
+                      {last ? `Mesuré le ${frDate(last.date)}` : 'Pas encore mesuré'}
+                    </AppText>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <Pressable onPress={() => handleToggleMarkerHidden(m)} hitSlop={6} style={styles.editBtn}>
+                        <EyeOff size={16} color={Palette.textMuted} />
+                      </Pressable>
+                      <PillButton label="Ajuster taux optimaux" icon={Pencil} variant="ghost" compact onPress={() => handleEditMarker(m)} />
+                    </View>
+                  </View>
+                </Card>
+              );
+            })}
+
+            {hiddenCount > 0 && (
+              <Pressable
+                onPress={() => setShowHidden((v) => !v)}
+                style={({ pressed }) => [styles.addRow, pressed && { transform: [{ scale: 0.98 }] }]}>
+                <View style={[styles.addIcon, { backgroundColor: Palette.container }]}>
+                  {showHidden ? <Eye size={18} color={Palette.text} /> : <EyeOff size={18} color={Palette.textMuted} />}
+                </View>
+                <AppText variant="labelMd" color={Palette.textMuted}>
+                  {showHidden
+                    ? 'Masquer'
+                    : 'Afficher ' + hiddenCount + (hiddenCount > 1 ? ' molecules masquees' : ' molecule masquee')}
+                </AppText>
+              </Pressable>
+            )}
+
+            {showHidden && hiddenWithStatus.map(({ m, last, status }) => {
+              const badge = STATUS_BADGE[status];
+              const alert = status === 'low' || status === 'high';
+              return (
+                <Card
+                  key={m.id}
+                  onPress={() => router.push({ pathname: '/marker/[id]', params: { id: m.id } })}
+                  style={[{ gap: 16, opacity: 0.6 }, alert && { borderWidth: 1, borderColor: Palette.coralSoft }]}>
+                  <View style={styles.rowBetweenTop}>
+                    <View style={styles.inlineLg}>
+                      <IconCircle icon={Droplet} size={44} bg={Palette.container} color={Palette.textMuted} />
+                      <View style={{ flexShrink: 1 }}>
+                        <AppText variant="headlineSm" style={{ fontSize: 17 }}>{m.name}</AppText>
+                      </View>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <Pressable onPress={() => handleToggleMarkerHidden(m)} hitSlop={6} style={styles.editBtn}>
+                        <Eye size={18} color={Palette.textMuted} />
+                      </Pressable>
+                      <Pressable onPress={() => handleEditMarker(m)} hitSlop={6} style={styles.editBtn}>
+                        <Pencil size={16} color={Palette.textMuted} />
+                      </Pressable>
+                    </View>
+                  </View>
+                </Card>
+              );
+            })}
+
+            <Pressable
+              onPress={handleOpenAddMarker}
+              style={({ pressed }) => [styles.addRow, pressed && { transform: [{ scale: 0.98 }] }]}>
+              <View style={styles.addIcon}>
+                <Plus size={18} color={Palette.obsidian} strokeWidth={2.6} />
               </View>
-            ))}
-          </View>
+              <AppText variant="labelMd">Ajouter une molécule / analyse</AppText>
+            </Pressable>
+          </>
         ) : (
-          /* VUE 2 : PRISES DE SANG ENREGISTRÉES */
-          <View>
-            <TouchableOpacity style={styles.addButton} onPress={handleOpenAddTest}>
-              <Plus size={18} color="#FFF" />
-              <Text style={styles.addButtonText}>Enregistrer une nouvelle prise de sang</Text>
-            </TouchableOpacity>
+          <>
+            <PillButton label="Enregistrer une nouvelle prise de sang" icon={Plus} onPress={handleOpenAddTest} />
 
             {labTests.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <Syringe size={32} color={colors.textMuted} />
-                <Text style={styles.emptyTitle}>Aucune prise de sang enregistrée</Text>
-                <Text style={styles.emptySubtitle}>
-                  Cliquez sur le bouton ci-dessus pour renseigner vos résultats (Ferritine, TSH, T3, T4, Anti-TPO, NFS...).
-                </Text>
-              </View>
+              <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 32 }}>
+                <IconCircle icon={Syringe} size={52} />
+                <AppText variant="headlineSm">Aucune prise de sang</AppText>
+                <AppText variant="bodySm" color={Palette.textMuted} style={{ textAlign: 'center' }}>
+                  Renseigne tes résultats (Ferritine, TSH, T3, T4, Anti-TPO, NFS…) pour suivre leur évolution.
+                </AppText>
+              </Card>
             ) : (
-              labTests.map((test) => {
-                const markerMap = new Map(markers.map((m) => [m.id, m]));
-
-                return (
-                  <View key={test.id} style={styles.testCard}>
-                    <View style={styles.testCardHeader}>
-                      <View style={styles.testDateRow}>
-                        <Calendar size={16} color={colors.primary} />
-                        <Text style={styles.testDateText}>Bilan du {test.date}</Text>
+              testsDesc.map((test) => (
+                <Card key={test.id} style={{ gap: 14 }}>
+                  <View style={styles.rowBetween}>
+                    <View style={styles.inlineLg}>
+                      <IconCircle icon={CalendarDays} size={40} bg={Palette.coralSoft} color={Palette.coralDeep} />
+                      <View>
+                        <AppText variant="labelSm" color={Palette.textMuted}>
+                          Bilan du
+                        </AppText>
+                        <AppText variant="headlineSm">{frDate(test.date)}</AppText>
                       </View>
-                      <TouchableOpacity
-                        onPress={() => handleDeleteTest(test.id)}
-                        style={styles.deleteBtn}>
-                        <Trash2 size={16} color={colors.danger} />
-                      </TouchableOpacity>
                     </View>
-
-                    {test.notes ? (
-                      <Text style={styles.testNotesText}>« {test.notes} »</Text>
-                    ) : null}
-
-                    <View style={styles.resultsGrid}>
-                      {Object.entries(test.values).map(([markerId, val]) => {
-                        const marker = markerMap.get(markerId);
-                        const name = marker ? marker.name : markerId;
-                        const unit = marker ? marker.unit : '';
-                        const min = marker?.minFunctional;
-                        const max = marker?.maxFunctional;
-
-                        let isOptimal = true;
-                        let statusText = 'Optimal';
-                        let badgeBg = '#ECFDF5';
-                        let badgeColor = '#065F46';
-
-                        if (min !== undefined && max !== undefined) {
-                          if (val < min) {
-                            isOptimal = false;
-                            statusText = `Trop bas (< ${min})`;
-                            badgeBg = '#FEF2F2';
-                            badgeColor = '#991B1B';
-                          } else if (val > max) {
-                            isOptimal = false;
-                            statusText = `Trop haut (> ${max})`;
-                            badgeBg = '#FFFBEB';
-                            badgeColor = '#92400E';
-                          }
-                        }
-
-                        return (
-                          <View key={markerId} style={styles.resultItem}>
-                            <View>
-                              <Text style={styles.resultName}>{name}</Text>
-                              <Text style={styles.resultValue}>
-                                {val} {unit}
-                              </Text>
-                            </View>
-                            <View style={[styles.statusBadge, { backgroundColor: badgeBg }]}>
-                              {isOptimal ? (
-                                <CheckCircle2 size={12} color={badgeColor} />
-                              ) : (
-                                <AlertCircle size={12} color={badgeColor} />
-                              )}
-                              <Text style={[styles.statusBadgeText, { color: badgeColor }]}>
-                                {statusText}
-                              </Text>
-                            </View>
-                          </View>
-                        );
-                      })}
+                    <View style={styles.testActions}>
+                      <Pressable
+                        onPress={() => handleEditTest(test)}
+                        style={styles.editBtn}
+                        hitSlop={6}
+                        accessibilityLabel="Modifier ce bilan">
+                        <Pencil size={16} color={Palette.text} />
+                      </Pressable>
+                      <Pressable
+                        onPress={() => handleDeleteTest(test.id)}
+                        style={styles.deleteBtn}
+                        hitSlop={6}
+                        accessibilityLabel="Supprimer ce bilan">
+                        <Trash2 size={17} color={Palette.coralDeep} />
+                      </Pressable>
                     </View>
                   </View>
-                );
-              })
+
+                  {test.notes ? (
+                    <AppText variant="bodySm" color={Palette.textVariant} style={{ fontStyle: 'italic' }}>
+                      « {test.notes} »
+                    </AppText>
+                  ) : null}
+
+                  <View style={{ gap: 6 }}>
+                    {Object.entries(test.values).map(([markerId, val]) => {
+                      const marker = markerMap.get(markerId);
+                      const st = marker ? statusOf(val, marker) : 'ok';
+                      const b = STATUS_BADGE[st];
+                      return (
+                        <View key={markerId} style={styles.resultRow}>
+                          <View style={{ flexShrink: 1 }}>
+                            <AppText variant="bodySm" color={Palette.textMuted}>
+                              {marker ? marker.name : markerId}
+                            </AppText>
+                            <AppText variant="labelMd" style={{ fontSize: 15 }}>
+                              {val} {marker?.unit ?? ''}
+                            </AppText>
+                          </View>
+                          <Badge
+                            label={
+                              st === 'low' && marker
+                                ? `< ${marker.minFunctional}`
+                                : st === 'high' && marker
+                                ? `> ${marker.maxFunctional}`
+                                : b.label
+                            }
+                            tone={b.tone}
+                            icon={st === 'ok' ? CircleCheck : TriangleAlert}
+                          />
+                        </View>
+                      );
+                    })}
+                  </View>
+                </Card>
+              ))
             )}
-          </View>
+          </>
         )}
       </ScrollView>
 
       {/* Modal Ajout/Modif Norme */}
-      <Modal visible={showMarkerModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {editingMarkerId ? 'Modifier la norme fonctionnelle' : 'Ajouter une analyse'}
-              </Text>
-              <TouchableOpacity onPress={() => setShowMarkerModal(false)}>
-                <X size={20} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalForm}>
-              <Text style={styles.fieldLabel}>Nom de la molécule / analyse :</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={markerName}
-                onChangeText={setMarkerName}
-                placeholder="Ex: Ferritine, Zinc, TSH..."
-                placeholderTextColor={colors.textMuted}
-              />
-
-              <View style={styles.rowFields}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Quantité Mini :</Text>
-                  <TextInput
-                    style={styles.fieldInput}
-                    keyboardType="numeric"
-                    value={markerMin}
-                    onChangeText={setMarkerMin}
-                    placeholder="Ex: 70"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.fieldLabel}>Quantité Maxi :</Text>
-                  <TextInput
-                    style={styles.fieldInput}
-                    keyboardType="numeric"
-                    value={markerMax}
-                    onChangeText={setMarkerMax}
-                    placeholder="Ex: 120"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-              </View>
-
-              <Text style={styles.fieldLabel}>Unité de mesure :</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={markerUnit}
-                onChangeText={setMarkerUnit}
-                placeholder="Ex: µg/L, mUI/L, pg/mL..."
-                placeholderTextColor={colors.textMuted}
-              />
-
-              <Text style={styles.fieldLabel}>Objectif pour les cheveux (optionnel) :</Text>
-              <TextInput
-                style={[styles.fieldInput, { height: 60 }]}
-                multiline
-                value={markerDesc}
-                onChangeText={setMarkerDesc}
-                placeholder="Ex: Nécessaire > 70 pour la repousse..."
-                placeholderTextColor={colors.textMuted}
-              />
-
-              <TouchableOpacity style={styles.saveModalButton} onPress={handleSaveMarker}>
-                <Save size={18} color="#FFF" />
-                <Text style={styles.saveModalButtonText}>Sauvegarder la norme</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
+      <BottomSheet
+        visible={showMarkerModal}
+        onClose={() => setShowMarkerModal(false)}
+        title={editingMarkerId ? 'Ajuster les seuils cibles' : 'Ajouter une analyse'}
+        subtitle="Personnalise tes objectifs fonctionnels">
+        <Field label="Nom de la molécule / analyse">
+          <TextInput
+            style={inputStyle}
+            value={markerName}
+            onChangeText={setMarkerName}
+            placeholder="Ex : Ferritine, Zinc, TSH…"
+            placeholderTextColor={Palette.textMuted}
+          />
+        </Field>
+        <View style={styles.rowFields}>
+          <Field label="Cible min." style={{ flex: 1 }}>
+            <TextInput
+              style={inputStyle}
+              keyboardType="numeric"
+              value={markerMin}
+              onChangeText={setMarkerMin}
+              placeholder="70"
+              placeholderTextColor={Palette.textMuted}
+            />
+          </Field>
+          <Field label="Cible max." style={{ flex: 1 }}>
+            <TextInput
+              style={inputStyle}
+              keyboardType="numeric"
+              value={markerMax}
+              onChangeText={setMarkerMax}
+              placeholder="120"
+              placeholderTextColor={Palette.textMuted}
+            />
+          </Field>
         </View>
-      </Modal>
+        <Field label="Unité de mesure">
+          <TextInput
+            style={inputStyle}
+            value={markerUnit}
+            onChangeText={setMarkerUnit}
+            placeholder="µg/L, mUI/L, pg/mL…"
+            placeholderTextColor={Palette.textMuted}
+          />
+        </Field>
+        <Field label="Objectif pour les cheveux (optionnel)">
+          <TextInput
+            style={[inputStyle, styles.multiline]}
+            multiline
+            value={markerDesc}
+            onChangeText={setMarkerDesc}
+            placeholder="Ex : nécessaire > 70 pour la repousse…"
+            placeholderTextColor={Palette.textMuted}
+          />
+        </Field>
+        <View style={styles.rowFields}>
+          <PillButton label="Annuler" variant="ghost" onPress={() => setShowMarkerModal(false)} style={{ flex: 1 }} />
+          <PillButton label="Enregistrer" icon={Check} onPress={handleSaveMarker} loading={saving} disabled={saving} style={{ flex: 1.4 }} />
+        </View>
+        {editingMarkerId && (
+          <Pressable
+            onPress={() => {
+              const marker = markers.find((m) => m.id === editingMarkerId);
+              if (marker) {
+                setShowMarkerModal(false);
+                handleDeleteMarker(marker);
+              }
+            }}
+            style={styles.deleteMarkerRow}>
+            <Trash2 size={16} color={Palette.coralDeep} />
+            <AppText variant="labelMd" color={Palette.coralDeep}>
+              Supprimer cette molécule
+            </AppText>
+          </Pressable>
+        )}
+      </BottomSheet>
 
       {/* Modal Saisie Prise de Sang */}
-      <Modal visible={showTestModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Saisir une prise de sang</Text>
-              <TouchableOpacity onPress={() => setShowTestModal(false)}>
-                <X size={20} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalForm}>
-              <Text style={styles.fieldLabel}>Date du prélèvement (AAAA-MM-JJ) :</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={testDate}
-                onChangeText={setTestDate}
-                placeholder="2026-10-01"
-                placeholderTextColor={colors.textMuted}
-              />
-
-              <Text style={styles.fieldLabel}>Notes / Contexte :</Text>
-              <TextInput
-                style={styles.fieldInput}
-                value={testNotes}
-                onChangeText={setTestNotes}
-                placeholder="Ex: Contrôle thyroïde et fer après 3 mois de cure"
-                placeholderTextColor={colors.textMuted}
-              />
-
-              <Text style={[styles.fieldLabel, { marginTop: 14 }]}>
-                Valeurs mesurées (laisser vide si non analysé) :
-              </Text>
-
-              {markers.map((m) => (
-                <View key={m.id} style={styles.testInputRow}>
-                  <View style={{ flex: 1.4 }}>
-                    <Text style={styles.testInputName}>{m.name}</Text>
-                    <Text style={styles.testInputTarget}>
-                      Norme : {m.minFunctional}-{m.maxFunctional} {m.unit}
-                    </Text>
+      <BottomSheet
+        visible={showTestModal}
+        onClose={() => setShowTestModal(false)}
+        title={editingTest ? 'Modifier la prise de sang' : 'Saisir une prise de sang'}
+        subtitle="Laisse vide les analyses non réalisées">
+        <Field label="Date de la prise de sang">
+          <Pressable
+            onPress={() => {
+              if (!showDatePicker) {
+                setPickerYear(parseInt(testDate.substring(0, 4)));
+                setPickerMonth(parseInt(testDate.substring(5, 7)) - 1);
+                setPickerStep('year');
+              }
+              setShowDatePicker((v) => !v);
+            }}
+            style={[styles.dateField, showDatePicker && styles.dateFieldActive]}>
+            <AppText variant="bodyLg">{frDate(testDate)}</AppText>
+            <CalendarDays size={18} color={showDatePicker ? Palette.primary : Palette.textMuted} />
+          </Pressable>
+        </Field>
+        {showDatePicker && (
+          <View style={styles.datePicker}>
+            {pickerStep === 'year' && (() => {
+              const now = new Date();
+              const currentYear = now.getFullYear();
+              const years = Array.from({ length: 10 }, (_, i) => currentYear - 9 + i);
+              return (
+                <>
+                  <AppText variant="headlineSm" style={{ textAlign: 'center', marginBottom: 12 }}>
+                    Choisir l'année
+                  </AppText>
+                  <View style={styles.pickerGrid}>
+                    {years.map((yr) => (
+                      <Pressable
+                        key={yr}
+                        onPress={() => { setPickerYear(yr); setPickerStep('month'); }}
+                        style={[styles.pickerCell, yr === pickerYear && styles.pickerCellSelected]}
+                      >
+                        <AppText variant="labelMd" style={yr === pickerYear ? { color: '#FFF' } : undefined}>
+                          {yr}
+                        </AppText>
+                      </Pressable>
+                    ))}
                   </View>
-                  <TextInput
-                    style={styles.testValueInput}
-                    keyboardType="numeric"
-                    placeholder={`Valeur (${m.unit})`}
-                    placeholderTextColor={colors.textMuted}
-                    value={testValues[m.id] || ''}
-                    onChangeText={(val) => setTestValues((prev) => ({ ...prev, [m.id]: val }))}
-                  />
-                </View>
-              ))}
-
-              <TouchableOpacity style={styles.saveModalButton} onPress={handleSaveTest}>
-                <Save size={18} color="#FFF" />
-                <Text style={styles.saveModalButtonText}>Enregistrer le bilan</Text>
-              </TouchableOpacity>
-            </ScrollView>
+                </>
+              );
+            })()}
+            {pickerStep === 'month' && (() => {
+              const now = new Date();
+              const currentYear = now.getFullYear();
+              const currentMonth = now.getMonth();
+              return (
+                <>
+                  <Pressable onPress={() => setPickerStep('year')} style={styles.pickerBack}>
+                    <ChevronLeft size={18} color={Palette.primary} />
+                    <AppText variant="headlineSm" color={Palette.primary}>{pickerYear}</AppText>
+                  </Pressable>
+                  <View style={styles.pickerGrid}>
+                    {MONTHS_FR.map((name, i) => {
+                      const disabled = pickerYear === currentYear && i > currentMonth;
+                      return (
+                        <Pressable
+                          key={i}
+                          disabled={disabled}
+                          onPress={() => { setPickerMonth(i); setPickerStep('day'); }}
+                          style={[
+                            styles.pickerCell,
+                            i === pickerMonth && styles.pickerCellSelected,
+                            disabled && { opacity: 0.3 },
+                          ]}
+                        >
+                          <AppText
+                            variant="labelMd"
+                            style={i === pickerMonth ? { color: '#FFF' } : disabled ? { color: Palette.textMuted } : undefined}
+                          >
+                            {name}
+                          </AppText>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </>
+              );
+            })()}
+            {pickerStep === 'day' && (
+              <>
+                <Pressable onPress={() => setPickerStep('month')} style={styles.pickerBack}>
+                  <ChevronLeft size={18} color={Palette.primary} />
+                  <AppText variant="headlineSm" color={Palette.primary}>
+                    {MONTHS_FR[pickerMonth]} {pickerYear}
+                  </AppText>
+                </Pressable>
+                <Calendar
+                  key={`${pickerYear}-${pickerMonth}`}
+                  current={`${pickerYear}-${String(pickerMonth + 1).padStart(2, '0')}-01`}
+                  maxDate={todayIso()}
+                  firstDay={1}
+                  hideArrows
+                  onDayPress={(day: { dateString: string }) => {
+                    setTestDate(day.dateString);
+                    setShowDatePicker(false);
+                  }}
+                  markedDates={{ [testDate]: { selected: true } }}
+                  theme={{
+                    calendarBackground: 'transparent',
+                    textSectionTitleColor: Palette.textMuted,
+                    arrowColor: Palette.obsidian,
+                    monthTextColor: Palette.text,
+                    dayTextColor: Palette.text,
+                    textDisabledColor: Palette.outlineVariant,
+                    todayTextColor: Palette.primary,
+                    selectedDayBackgroundColor: Palette.obsidian,
+                    selectedDayTextColor: '#FFFFFF',
+                    textMonthFontFamily: Type.headlineSm.fontFamily,
+                    textDayFontFamily: Type.labelMd.fontFamily,
+                    textDayHeaderFontFamily: Type.labelSm.fontFamily,
+                    textMonthFontSize: 16,
+                  }}
+                />
+              </>
+            )}
           </View>
+        )}
+        <Field label="Notes / contexte">
+          <TextInput
+            style={inputStyle}
+            value={testNotes}
+            onChangeText={setTestNotes}
+            placeholder="Ex : contrôle après 3 mois de cure"
+            placeholderTextColor={Palette.textMuted}
+          />
+        </Field>
+        <View style={{ gap: 8 }}>
+          {markers.map((m) => (
+            <View key={m.id} style={styles.testInputRow}>
+              <View style={{ flex: 1 }}>
+                <AppText variant="labelMd">{m.name}</AppText>
+                <AppText variant="bodySm" color={Palette.textMuted}>
+                  Cible {m.minFunctional}–{m.maxFunctional} {m.unit}
+                </AppText>
+              </View>
+              <TextInput
+                style={styles.testValueInput}
+                keyboardType="numeric"
+                placeholder={m.unit}
+                placeholderTextColor={Palette.textMuted}
+                value={testValues[m.id] || ''}
+                onChangeText={(val) => setTestValues((prev) => ({ ...prev, [m.id]: val }))}
+              />
+            </View>
+          ))}
         </View>
-      </Modal>
-    </SafeAreaView>
+        <PillButton label={editingTest ? 'Enregistrer les modifications' : 'Enregistrer le bilan'} icon={Check} onPress={handleSaveTest} loading={saving} disabled={saving} />
+      </BottomSheet>
+    </View>
+  );
+}
+
+function Field({ label, children, style }: { label: string; children: React.ReactNode; style?: object }) {
+  return (
+    <View style={[{ gap: 6 }, style]}>
+      <AppText variant="labelSm" color={Palette.textVariant} style={{ paddingLeft: 8 }}>
+        {label}
+      </AppText>
+      {children}
+    </View>
+  );
+}
+
+function BottomSheet({
+  visible,
+  onClose,
+  title,
+  subtitle,
+  children,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.sheet}>
+          <View style={styles.grabber} />
+          <View style={styles.rowBetween}>
+            <View style={styles.inlineLg}>
+              <IconCircle icon={SlidersHorizontal} size={40} bg={Palette.limeSoft} color={Palette.primary} />
+              <View style={{ flexShrink: 1 }}>
+                <AppText variant="headlineSm">{title}</AppText>
+                {subtitle ? (
+                  <AppText variant="bodySm" color={Palette.textMuted}>
+                    {subtitle}
+                  </AppText>
+                ) : null}
+              </View>
+            </View>
+            <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={6}>
+              <X size={18} color={Palette.text} />
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#E4E8DB',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    gap: 12,
-  },
-  tabButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-    gap: 8,
-  },
-  tabButtonActive: {
-    backgroundColor: '#E2E8F0',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-  },
-  tabButtonText: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  tabButtonTextActive: {
-    color: '#0F172A',
-    fontWeight: '700',
-  },
+  screen: { flex: 1, backgroundColor: Palette.canvas },
   content: {
-    padding: 16,
-    paddingBottom: 60,
+    paddingHorizontal: Spacing.margin,
+    paddingTop: 8,
+    paddingBottom: DockClearance,
+    gap: Spacing.md,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
   },
-  introBox: {
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#0EA5E9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  introTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 4,
-  },
-  introText: {
-    fontSize: 12,
-    color: '#64748B',
-    lineHeight: 18,
-  },
-  addButton: {
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  rowBetweenTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  inlineLg: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 },
+  caps: { textTransform: 'uppercase', letterSpacing: 1 },
+  addRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    height: 56,
+    paddingHorizontal: 8,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.card,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: Palette.outlineVariant,
+  },
+  addIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Palette.lime,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0F172A',
+  },
+  metricRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    backgroundColor: Palette.containerLow,
+    borderRadius: Radius.lg,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-    marginBottom: 16,
   },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  normCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  normCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  normTitleContainer: {
-    flex: 1,
-  },
-  normName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 6,
-  },
-  rangeBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#F0FDF4',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  metricValue: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  track: {
+    height: 12,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
+    overflow: 'visible',
+    backgroundColor: Palette.container,
   },
-  rangeBadgeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#166534',
+  zone: { position: 'absolute', top: 0, bottom: 0, borderRadius: 6 },
+  needle: {
+    position: 'absolute',
+    top: -5,
+    width: 6,
+    height: 22,
+    marginLeft: -3,
+    borderRadius: 3,
+    backgroundColor: Palette.obsidian,
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
   },
-  normDesc: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 8,
-    lineHeight: 16,
-  },
-  editIconBtn: {
-    padding: 6,
-    borderRadius: 6,
-    backgroundColor: '#F0F9FF',
-  },
-  emptyCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 30,
-    borderRadius: 16,
+  cardFooter: { borderTopWidth: 1, borderTopColor: Palette.container, paddingTop: 12 },
+  testActions: { flexDirection: 'row', gap: 8 },
+  editBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Palette.container,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginTop: 12,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    color: '#94A3B8',
-    textAlign: 'center',
-    marginTop: 6,
-    lineHeight: 18,
-  },
-  testCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  testCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  testDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  testDateText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
+    justifyContent: 'center',
   },
   deleteBtn: {
-    padding: 6,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Palette.coralSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  testNotesText: {
-    fontSize: 12,
-    fontStyle: 'italic',
-    color: '#64748B',
-    marginBottom: 12,
-  },
-  resultsGrid: {
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
-    paddingTop: 10,
-  },
-  resultItem: {
+  resultRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 4,
+    gap: 8,
+    backgroundColor: Palette.containerLow,
+    borderRadius: Radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  resultName: {
-    fontSize: 13,
-    color: '#334155',
-    fontWeight: '600',
-  },
-  resultValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  statusBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+  overlay: { flex: 1, backgroundColor: 'rgba(18,22,20,0.45)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: Palette.surface,
+    borderTopLeftRadius: Radius.xxl,
+    borderTopRightRadius: Radius.xxl,
+    paddingHorizontal: Spacing.margin,
+    paddingTop: 10,
+    gap: 16,
     maxHeight: '90%',
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  grabber: { alignSelf: 'center', width: 44, height: 5, borderRadius: 3, backgroundColor: Palette.containerHighest },
+  closeBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Palette.container,
     alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    justifyContent: 'center',
   },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  modalForm: {
-    marginBottom: 20,
-  },
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#334155',
-    marginBottom: 6,
-  },
-  fieldInput: {
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
-    marginBottom: 12,
-  },
-  rowFields: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  saveModalButton: {
+  rowFields: { flexDirection: 'row', gap: 10 },
+  deleteMarkerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0F172A',
-    paddingVertical: 14,
-    borderRadius: 12,
     gap: 8,
-    marginTop: 10,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: Palette.container,
   },
-  saveModalButtonText: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: '700',
+  dateField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 52,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.containerLow,
+    paddingHorizontal: 20,
   },
+  dateFieldActive: { borderWidth: 1.5, borderColor: Palette.lime },
+  datePicker: { backgroundColor: Palette.card, borderRadius: Radius.lg, padding: 12 },
+  pickerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pickerCell: {
+    flexBasis: '30%',
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 44,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.containerLow,
+  },
+  pickerCellSelected: { backgroundColor: Palette.obsidian },
+  pickerBack: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 12 },
+  multiline: { height: 88, borderRadius: Radius.lg, paddingTop: 14, textAlignVertical: 'top' },
   testInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  testInputName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1E293B',
-  },
-  testInputTarget: {
-    fontSize: 11,
-    color: '#64748B',
+    gap: 10,
+    backgroundColor: Palette.card,
+    borderRadius: Radius.lg,
+    padding: 12,
   },
   testValueInput: {
-    width: 110,
-    height: 38,
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    fontSize: 13,
-    color: '#0F172A',
-    backgroundColor: '#F8FAFC',
-    textAlign: 'right',
+    width: 104,
+    height: 42,
+    borderRadius: Radius.full,
+    backgroundColor: Palette.containerLow,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: Palette.text,
+    textAlign: 'center',
   },
 });

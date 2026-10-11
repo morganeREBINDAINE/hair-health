@@ -1,33 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  Switch,
-  TextInput,
-  ActivityIndicator,
-  SafeAreaView,
-} from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import {
   FileSpreadsheet,
-  Download,
   Share2,
-  Cloud,
-  CheckCircle2,
-  LogIn,
+  CircleCheck,
   LogOut,
-  Settings,
   Sparkles,
   Pill,
-  Zap,
   Activity,
+  FlaskConical,
+  SlidersHorizontal,
+  User,
 } from 'lucide-react-native';
-import { Colors } from '../constants/theme';
 import { ExcelService, ExportFilterOptions } from '../services/excelService';
-import { signInWithGoogle, supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
+import { StorageService } from '../services/storageService';
+import { Palette, Spacing, DockClearance, Radius } from '../constants/theme';
+import {
+  AppText,
+  Card,
+  Chip,
+  PillButton,
+  ScreenHeader,
+  SectionHeader,
+  ToggleRow,
+} from '../components/ui';
 
 type DatePreset = '7d' | '30d' | '90d' | 'all';
 
@@ -42,19 +39,11 @@ export default function ExportScreen() {
   const [includeLabTests, setIncludeLabTests] = useState(true);
   const [includeLabNorms, setIncludeLabNorms] = useState(true);
 
-  // État Supabase & Utilisateur
+  // Utilisateur connecté
   const [user, setUser] = useState<any>(null);
-  const [authLoading, setAuthLoading] = useState(false);
-
-  // Config manuelle Supabase
-  const [showConfig, setShowConfig] = useState(false);
-  const [customUrl, setCustomUrl] = useState('');
-  const [customKey, setCustomKey] = useState('');
-
-  const colors = Colors.light;
 
   useEffect(() => {
-    checkUser();
+    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null));
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
     });
@@ -64,27 +53,9 @@ export default function ExportScreen() {
     };
   }, []);
 
-  const checkUser = async () => {
-    const { data } = await supabase.auth.getSession();
-    setUser(data.session?.user ?? null);
-  };
-
-  const handleGoogleLogin = async () => {
-    setAuthLoading(true);
-    try {
-      const res = await signInWithGoogle();
-      if (!res.success && res.error) {
-        Alert.alert('Information Google Sign-In', res.error);
-      }
-    } catch (e: any) {
-      Alert.alert('Erreur', e.message || 'Impossible de se connecter à Google.');
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    await StorageService.clearCache();
     setUser(null);
     Alert.alert('Déconnexion', 'Vous êtes déconnecté.');
   };
@@ -131,414 +102,104 @@ export default function ExportScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* BLOC 1 : EXPORTATION EXCEL */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <FileSpreadsheet size={22} color={colors.meds} />
-            <Text style={styles.cardTitle}>Exporter en Fichier Excel (.xlsx)</Text>
-          </View>
-          <Text style={styles.cardSub}>
-            Choisissez la période et cochez les données que vous souhaitez inclure dans le tableur.
-          </Text>
+    <View style={styles.screen}>
+      <ScreenHeader title="Export & compte" />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View>
+          <AppText variant="labelMd" color={Palette.textVariant}>
+            Partage avec ton médecin
+          </AppText>
+          <AppText variant="headlineLg" style={{ marginTop: 4 }}>
+            Exporter mes données
+          </AppText>
+        </View>
 
-          {/* Choix de la période */}
-          <Text style={styles.sectionLabel}>Période d'export :</Text>
-          <View style={styles.presetRow}>
-            {[
-              { id: '7d', label: '7 jours' },
-              { id: '30d', label: '30 jours' },
-              { id: '90d', label: '3 mois' },
-              { id: 'all', label: 'Tout' },
-            ].map((p) => {
-              const isSelected = datePreset === p.id;
-              return (
-                <TouchableOpacity
+        {/* Export Excel */}
+        <Card style={{ gap: 18 }}>
+          <SectionHeader
+            icon={FileSpreadsheet}
+            iconBg={Palette.limeSoft}
+            iconColor={Palette.primary}
+            title="Fichier Excel (.xlsx)"
+            subtitle="Période et données à inclure"
+          />
+
+          <View style={{ gap: 10 }}>
+            <AppText variant="labelMd">Période</AppText>
+            <View style={styles.wrap}>
+              {[
+                { id: '7d', label: '7 jours' },
+                { id: '30d', label: '30 jours' },
+                { id: '90d', label: '3 mois' },
+                { id: 'all', label: 'Tout' },
+              ].map((p) => (
+                <Chip
                   key={p.id}
+                  label={p.label}
+                  selected={datePreset === p.id}
                   onPress={() => setDatePreset(p.id as DatePreset)}
-                  style={[styles.presetButton, isSelected && styles.presetButtonActive]}>
-                  <Text style={[styles.presetButtonText, isSelected && styles.presetButtonTextActive]}>
-                    {p.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                  style={styles.flatChip}
+                />
+              ))}
+            </View>
           </View>
 
-          {/* Données à inclure */}
-          <Text style={[styles.sectionLabel, { marginTop: 16 }]}>Données à inclure :</Text>
+          <View style={{ gap: 8 }}>
+            <AppText variant="labelMd">Données à inclure</AppText>
+            <ToggleRow icon={Activity} title="Anxiété, boule gorge & disputes" value={includeSymptoms} onValueChange={setIncludeSymptoms} />
+            <ToggleRow icon={Sparkles} title="Cheveux, lavages & coupes" value={includeHairCare} onValueChange={setIncludeHairCare} />
+            <ToggleRow icon={Pill} title="Compléments pris & dosages" value={includeMedications} onValueChange={setIncludeMedications} />
+            <ToggleRow icon={FlaskConical} title="Bilans de prises de sang" value={includeLabTests} onValueChange={setIncludeLabTests} />
+            <ToggleRow icon={SlidersHorizontal} title="Normes fonctionnelles" value={includeLabNorms} onValueChange={setIncludeLabNorms} />
+          </View>
 
-          <View style={styles.optionRow}>
-            <View style={styles.optionLabelGroup}>
-              <Zap size={16} color={colors.anxiety} />
-              <Text style={styles.optionLabel}>Anxiété, Boule gorge & Disputes</Text>
-            </View>
-            <Switch
-              value={includeSymptoms}
-              onValueChange={setIncludeSymptoms}
-              trackColor={{ false: colors.border, true: colors.primary }}
+          <PillButton label="Générer et partager le fichier" icon={Share2} loading={exporting} onPress={handleGenerateExcel} />
+        </Card>
+
+        {/* Compte */}
+        {user && (
+          <Card style={{ gap: 14 }}>
+            <SectionHeader
+              icon={User}
+              iconBg={Palette.containerLow}
+              iconColor={Palette.textVariant}
+              title="Mon compte"
+              subtitle="Synchronisation automatique"
             />
-          </View>
-
-          <View style={styles.optionRow}>
-            <View style={styles.optionLabelGroup}>
-              <Sparkles size={16} color={colors.hair} />
-              <Text style={styles.optionLabel}>Santé cheveux, Lavages & Coupes</Text>
+            <View style={styles.userPill}>
+              <CircleCheck size={16} color={Palette.primary} />
+              <AppText variant="bodyMd" color={Palette.text} numberOfLines={1} style={{ flex: 1 }}>
+                {user.email}
+              </AppText>
             </View>
-            <Switch
-              value={includeHairCare}
-              onValueChange={setIncludeHairCare}
-              trackColor={{ false: colors.border, true: colors.primary }}
-            />
-          </View>
-
-          <View style={styles.optionRow}>
-            <View style={styles.optionLabelGroup}>
-              <Pill size={16} color={colors.meds} />
-              <Text style={styles.optionLabel}>Compléments pris & Dosages</Text>
-            </View>
-            <Switch
-              value={includeMedications}
-              onValueChange={setIncludeMedications}
-              trackColor={{ false: colors.border, true: colors.primary }}
-            />
-          </View>
-
-          <View style={styles.optionRow}>
-            <View style={styles.optionLabelGroup}>
-              <Activity size={16} color={colors.blood} />
-              <Text style={styles.optionLabel}>Bilans de prises de sang</Text>
-            </View>
-            <Switch
-              value={includeLabTests}
-              onValueChange={setIncludeLabTests}
-              trackColor={{ false: colors.border, true: colors.primary }}
-            />
-          </View>
-
-          <View style={styles.optionRow}>
-            <View style={styles.optionLabelGroup}>
-              <Settings size={16} color={colors.textSecondary} />
-              <Text style={styles.optionLabel}>Normes fonctionnelles de référence</Text>
-            </View>
-            <Switch
-              value={includeLabNorms}
-              onValueChange={setIncludeLabNorms}
-              trackColor={{ false: colors.border, true: colors.primary }}
-            />
-          </View>
-
-          {/* Bouton d'export */}
-          <TouchableOpacity
-            style={styles.exportBtn}
-            onPress={handleGenerateExcel}
-            disabled={exporting}>
-            {exporting ? (
-              <ActivityIndicator color="#FFF" size="small" />
-            ) : (
-              <>
-                <Share2 size={18} color="#FFF" />
-                <Text style={styles.exportBtnText}>Générer et Partager le fichier Excel</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* BLOC 2 : SYNCHRONISATION SUPABASE & GOOGLE OAUTH */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Cloud size={22} color={colors.primary} />
-            <Text style={styles.cardTitle}>Sauvegarde Cloud Supabase & Google</Text>
-          </View>
-          <Text style={styles.cardSub}>
-            Retrouvez toutes vos données même si vous changez de téléphone grâce à la synchronisation cloud sécurisée.
-          </Text>
-
-          {user ? (
-            <View style={styles.userBox}>
-              <View style={styles.userStatusRow}>
-                <CheckCircle2 size={18} color={colors.success} />
-                <Text style={styles.userStatusText}>Connecté avec Google</Text>
-              </View>
-              <Text style={styles.userEmail}>{user.email}</Text>
-              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-                <LogOut size={16} color={colors.danger} />
-                <Text style={styles.logoutBtnText}>Se déconnecter</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.authBox}>
-              <Text style={styles.offlineNotice}>
-                Vos données sont actuellement enregistrées en toute sécurité en local sur votre appareil.
-              </Text>
-              <TouchableOpacity
-                style={styles.googleBtn}
-                onPress={handleGoogleLogin}
-                disabled={authLoading}>
-                {authLoading ? (
-                  <ActivityIndicator color="#FFF" size="small" />
-                ) : (
-                  <>
-                    <LogIn size={18} color="#FFF" />
-                    <Text style={styles.googleBtnText}>Se connecter avec Google</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Option configuration Supabase custom */}
-          <TouchableOpacity
-            style={styles.configToggle}
-            onPress={() => setShowConfig(!showConfig)}>
-            <Settings size={14} color="#64748B" />
-            <Text style={styles.configToggleText}>
-              {showConfig ? 'Masquer paramètres Supabase' : 'Configurer son projet Supabase'}
-            </Text>
-          </TouchableOpacity>
-
-          {showConfig && (
-            <View style={styles.configForm}>
-              <Text style={styles.configHint}>
-                Par défaut, l'application utilise les variables de configuration ou le mode local. Vous pouvez coller ici l'URL de votre propre projet Supabase :
-              </Text>
-              <Text style={styles.inputLabel}>URL Supabase :</Text>
-              <TextInput
-                style={styles.configInput}
-                value={customUrl}
-                onChangeText={setCustomUrl}
-                placeholder="https://xxxx.supabase.co"
-                placeholderTextColor={colors.textMuted}
-              />
-              <Text style={styles.inputLabel}>Clé Anon publique :</Text>
-              <TextInput
-                style={styles.configInput}
-                value={customKey}
-                onChangeText={setCustomKey}
-                placeholder="eyJh..."
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-          )}
-        </View>
+            <PillButton label="Se déconnecter" icon={LogOut} variant="coral" compact onPress={handleLogout} />
+          </Card>
+        )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#E4E8DB',
-  },
+  screen: { flex: 1, backgroundColor: Palette.canvas },
   content: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 6,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  cardSub: {
-    fontSize: 13,
-    color: '#64748B',
-    lineHeight: 18,
-    marginBottom: 14,
-  },
-  sectionLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
-    marginBottom: 8,
-  },
-  presetRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  presetButton: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  presetButtonActive: {
-    backgroundColor: '#0F172A',
-    borderColor: '#0F172A',
-  },
-  presetButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  presetButtonTextActive: {
-    color: '#FFFFFF',
-  },
-  optionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
-  },
-  optionLabelGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  optionLabel: {
-    fontSize: 13,
-    color: '#334155',
-    fontWeight: '500',
-  },
-  exportBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#059669', // Emerald
-    paddingVertical: 14,
-    borderRadius: 12,
-    gap: 8,
-    marginTop: 18,
-    shadowColor: '#059669',
-    shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  exportBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  userBox: {
-    backgroundColor: '#F0FDF4',
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    marginTop: 8,
-  },
-  userStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 4,
-  },
-  userStatusText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#166534',
-  },
-  userEmail: {
-    fontSize: 13,
-    color: '#334155',
-    marginBottom: 10,
-  },
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-  },
-  logoutBtnText: {
-    fontSize: 12,
-    color: '#EF4444',
-    fontWeight: '600',
-  },
-  authBox: {
-    backgroundColor: '#F8FAFC',
-    padding: 14,
-    borderRadius: 12,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  offlineNotice: {
-    fontSize: 12,
-    color: '#64748B',
-    marginBottom: 12,
-    lineHeight: 16,
-  },
-  googleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#0F172A',
-    paddingVertical: 12,
-    borderRadius: 10,
-    gap: 8,
-  },
-  googleBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  configToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 14,
+    paddingHorizontal: Spacing.margin,
+    paddingTop: 8,
+    paddingBottom: DockClearance,
+    gap: Spacing.lg,
+    width: '100%',
+    maxWidth: 640,
     alignSelf: 'center',
   },
-  configToggleText: {
-    fontSize: 12,
-    color: '#64748B',
-  },
-  configForm: {
-    marginTop: 12,
-    backgroundColor: '#F8FAFC',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  configHint: {
-    fontSize: 11,
-    color: '#94A3B8',
-    marginBottom: 10,
-    lineHeight: 15,
-  },
-  inputLabel: {
-    fontSize: 12,
-    color: '#475569',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  configInput: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 12,
-    color: '#0F172A',
-    marginBottom: 10,
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  flatChip: { backgroundColor: Palette.containerLow, shadowOpacity: 0, elevation: 0 },
+  userPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Palette.containerLow,
+    borderRadius: Radius.full,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
 });
