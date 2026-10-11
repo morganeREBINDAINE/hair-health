@@ -18,8 +18,9 @@ import type { Session } from '@supabase/supabase-js';
 import { StorageService } from '../services/storageService';
 import { supabase, createSessionFromUrl } from '../lib/supabase';
 import { Toast } from '../lib/toast';
-import { SyncEvent } from '../lib/syncEvent';
+import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import LoginScreen from '../components/LoginScreen';
+import { DataLoading } from '../components/DataLoader';
 import { Palette, Elevation, Type } from '../constants/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -221,6 +222,7 @@ function AppRoot() {
   });
   // undefined = vérification en cours, null = pas de session, Session = connectée
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const initialSyncing = useInitialSyncing();
 
   useEffect(() => {
     let splashHidden = false;
@@ -235,7 +237,16 @@ function AppRoot() {
     // s'il y a un deep link OAuth en attente (évite un flash de l'écran de login)
     let awaitingDeepLinkCheck = Platform.OS !== 'web';
 
+    // Utilisateur dont les données sont déjà affichées : un SIGNED_IN pour le même
+    // utilisateur (ex. retour sur l'onglet web) ne doit pas réafficher le loader plein écran
+    let displayedUserId: string | null = null;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+      // Positionné avant setSession pour ne jamais rendre les onglets avec un cache vide
+      const isNewLogin = event === 'SIGNED_IN' && !!newSession?.user && newSession.user.id !== displayedUserId;
+      if (isNewLogin) SyncEvent.setInitialSyncing(true);
+      displayedUserId = newSession?.user.id ?? null;
+
       if (newSession) {
         setSession(newSession);
         hideSplash();
@@ -256,6 +267,7 @@ function AppRoot() {
           Toast.error('Connexion internet requise pour récupérer vos données');
         } finally {
           SyncEvent.emit();
+          if (isNewLogin) SyncEvent.setInitialSyncing(false);
         }
       }
     });
@@ -318,6 +330,11 @@ function AppRoot() {
   // Pas de session → écran de login
   if (!session) {
     return <LoginScreen />;
+  }
+
+  // Connexion : on attend que le cache soit rempli depuis le cloud avant d'afficher les onglets
+  if (initialSyncing) {
+    return <DataLoading />;
   }
 
   return (

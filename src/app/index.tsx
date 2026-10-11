@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Pressable, Animated, Easing } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, RefreshControl, Pressable } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
   Activity,
@@ -25,75 +25,10 @@ import { DailyLog, LabMarkerDefinition, LabTest, TreatmentPlan } from '../types'
 import { todayIso, shiftIso, shiftMonthsIso, dayShort, daysBetween, frDate } from '../lib/dates';
 import { AppText, Badge, Card, IconCircle, ScreenHeader } from '../components/ui';
 import { PillBarChart } from '../components/charts';
+import { DataLoading } from '../components/DataLoader';
 import { SyncEvent } from '../lib/syncEvent';
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-
-function InfinityLoader({ size = 64, color = Palette.primary }: { size?: number; color?: string }) {
-  const phase = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(phase, {
-        toValue: 1,
-        duration: 1600,
-        easing: Easing.inOut(Easing.ease),
-        useNativeDriver: true,
-      })
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [phase]);
-
-  const w = size;
-  const h = size * 0.5;
-  const halfW = w / 2;
-  const r = h / 2 - 2;
-
-  const rotate = phase.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: ['0deg', '180deg', '360deg'],
-  });
-
-  const scaleX = phase.interpolate({
-    inputRange: [0, 0.25, 0.5, 0.75, 1],
-    outputRange: [1, 0.85, 1, 0.85, 1],
-  });
-
-  return (
-    <Animated.View
-      style={{
-        width: w,
-        height: h,
-        transform: [{ rotate }, { scaleX }],
-      }}>
-      <View
-        style={{
-          position: 'absolute',
-          left: halfW - r * 2 - 1,
-          top: h / 2 - r,
-          width: r * 2,
-          height: r * 2,
-          borderRadius: r,
-          borderWidth: 3,
-          borderColor: color,
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          left: halfW + 1,
-          top: h / 2 - r,
-          width: r * 2,
-          height: r * 2,
-          borderRadius: r,
-          borderWidth: 3,
-          borderColor: color,
-        }}
-      />
-    </Animated.View>
-  );
-}
 
 /**
  * Fréquence de contrôle de chaque marqueur selon la dernière valeur mesurée :
@@ -154,11 +89,17 @@ export default function DashboardScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const all = await StorageService.getAllDailyLogs();
+      // Tout est lu avant la mise à jour de l'état : le dashboard s'affiche en une seule fois, déjà rempli
+      const [all, tests, markers, plans] = await Promise.all([
+        StorageService.getAllDailyLogs(),
+        StorageService.getLabTests(),
+        StorageService.getLabMarkers(),
+        StorageService.getTreatmentPlans(),
+      ]);
       setLogs(Object.values(all).sort((a, b) => a.date.localeCompare(b.date)));
-      setLabTests(await StorageService.getLabTests());
-      setLabMarkers(await StorageService.getLabMarkers());
-      setTreatmentPlans(await StorageService.getTreatmentPlans());
+      setLabTests(tests);
+      setLabMarkers(markers);
+      setTreatmentPlans(plans);
     } catch (e) {
       console.error('Erreur chargement dashboard:', e);
     } finally {
@@ -188,12 +129,7 @@ export default function DashboardScreen() {
     return (
       <View style={styles.screen}>
         <ScreenHeader title="Accueil" />
-        <View style={styles.loaderContainer}>
-          <InfinityLoader size={64} color={Palette.primary} />
-          <AppText variant="labelMd" color={Palette.textMuted} style={{ marginTop: 16 }}>
-            Chargement de vos données…
-          </AppText>
-        </View>
+        <DataLoading />
       </View>
     );
   }
@@ -600,7 +536,6 @@ function EmptyHint({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Palette.canvas },
-  loaderContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: {
     paddingHorizontal: Spacing.margin,
     paddingTop: 8,
