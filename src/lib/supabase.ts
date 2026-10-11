@@ -34,8 +34,31 @@ export const supabase = createClient(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON
     // Sur web : true pour que Supabase lise automatiquement le code/token dans l'URL de callback
     // Sur natif : false car on gère la session manuellement via WebBrowser
     detectSessionInUrl: Platform.OS === 'web',
+    flowType: 'pkce',
   },
 });
+
+const handledAuthUrls = new Set<string>();
+
+export const createSessionFromUrl = async (url: string) => {
+  if (handledAuthUrls.has(url)) return supabase.auth.getSession().then(({ data }) => data.session);
+  handledAuthUrls.add(url);
+
+  const parsed = Linking.parse(url);
+  const params = (parsed.queryParams ?? {}) as Record<string, string>;
+
+  if (params.error || params.error_description) {
+    throw new Error(params.error_description || params.error);
+  }
+
+  if (params.code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(params.code);
+    if (error) throw error;
+    return data.session;
+  }
+
+  return null;
+};
 
 export const signInWithGoogle = async () => {
   try {
@@ -53,6 +76,7 @@ export const signInWithGoogle = async () => {
 
     // Natif (iOS / Android) : deep link via expo-web-browser
     const redirectUrl = Linking.createURL('auth/callback');
+    console.log('[OAuth] redirectUrl =', redirectUrl);
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -65,21 +89,16 @@ export const signInWithGoogle = async () => {
     if (!data?.url) return { success: false };
 
     const res = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+    console.log('[OAuth] result =', res.type);
     if (res.type === 'success' && res.url) {
-      const parsed = Linking.parse(res.url);
-      const access_token = parsed.queryParams?.access_token as string | undefined;
-      const refresh_token = parsed.queryParams?.refresh_token as string | undefined;
-      if (access_token && refresh_token) {
-        await supabase.auth.setSession({ access_token, refresh_token });
-      } else {
-        // Flux PKCE : échange du code
-        const code = parsed.queryParams?.code as string | undefined;
-        if (code) await supabase.auth.exchangeCodeForSession(code);
-      }
+      await createSessionFromUrl(res.url);
       return { success: true };
     }
 
-    return { success: false };
+    // Sur Android, le retour peut arriver via le deep link (géré dans _layout.tsx)
+    // alors qu'openAuthSessionAsync renvoie "dismiss" : on vérifie la session avant d'abandonner.
+    const { data: current } = await supabase.auth.getSession();
+    return { success: !!current.session };
   } catch (err: any) {
     console.error('Erreur de connexion Google:', err);
     return { success: false, error: err.message };
