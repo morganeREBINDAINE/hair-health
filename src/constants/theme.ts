@@ -1,129 +1,144 @@
 import { Platform } from 'react-native';
 
-export const Colors = {
-  light: {
-    primary: '#1A1C1F',
-    primaryLight: '#E8F5E9',
-    background: '#E4E8DB',
-    surface: '#FFFFFF',
-    surfaceSubtle: '#F2F5EE',
-    border: '#DDE4D8',
-    text: '#1A1C1F',
-    textSecondary: '#637064',
-    textMuted: '#9BA89C',
-    backgroundElement: '#EDF1E8',
-    backgroundSelected: '#E0E6DA',
+/**
+ * Design system « Organic Vitality » — importé du projet Google Stitch
+ * « Suivi Santé & Cheveux ». Toutes les couleurs, rayons, ombres et styles
+ * typographiques des écrans en découlent.
+ */
+export const Palette = {
+  // Canvas & surfaces
+  canvas: '#F3F6F2',
+  surface: '#F7FAF6',
+  card: '#FFFFFF',
+  cardCream: '#FAFBF9',
+  containerLow: '#F1F4F0',
+  container: '#ECEFEB',
+  containerHigh: '#E6E9E5',
+  containerHighest: '#E0E3DF',
 
-    darkCard: '#1A1C1F',
-    darkCardText: '#FFFFFF',
-    darkCardSub: '#9CA3AF',
-    accentLime: '#A8D86A',
-    accentLimeLight: '#E8F7D0',
-    accentLimeText: '#2E5C12',
-    badgeGoodBg: '#E4F5D2',
-    badgeGoodText: '#2E5C12',
+  // Texte
+  text: '#121614',
+  textVariant: '#414A37',
+  textMuted: '#7E8680',
+  outline: '#717A65',
+  outlineVariant: '#C0CAB2',
 
-    hair: '#7C3AED',
-    hairLight: '#F3E8FF',
-    meds: '#10B981',
-    medsLight: '#ECFDF5',
-    anxiety: '#F97316',
-    anxietyHigh: '#EF4444',
-    anxietyLight: '#FFF7ED',
-    conflict: '#E11D48',
-    conflictLight: '#FFE4E6',
-    blood: '#DC2626',
-    bloodLight: '#FEF2F2',
-    henna: '#D97706',
-    hennaLight: '#FEF3C7',
-    wash: '#06B6D4',
-    washLight: '#ECFEFF',
-    sleep: '#6366F1',
-    sleepLight: '#EEF2FF',
+  // Obsidienne (cartes sombres, boutons principaux)
+  obsidian: '#191D1A',
+  obsidianText: '#EEF2EE',
+  obsidianMuted: 'rgba(238,242,238,0.65)',
 
-    success: '#10B981',
-    warning: '#F59E0B',
-    danger: '#EF4444',
-  },
-  dark: {
-    primary: '#38BDF8',
-    primaryLight: '#082F49',
-    background: '#0F172A',
-    surface: '#1E293B',
-    surfaceSubtle: '#334155',
-    border: '#334155',
-    text: '#F8FAFC',
-    textSecondary: '#94A3B8',
-    textMuted: '#64748B',
-    backgroundElement: '#1E293B',
-    backgroundSelected: '#334155',
+  // Primaire — vert vitalité
+  lime: '#8EE341',
+  limeSoft: 'rgba(142,227,65,0.22)',
+  limeFixed: '#A2F955',
+  limeDim: '#88DC3A',
+  primary: '#386B00',
+  onLime: '#1D3A00',
 
-    darkCard: '#1E293B',
-    darkCardText: '#F8FAFC',
-    darkCardSub: '#94A3B8',
-    accentLime: '#A8D86A',
-    accentLimeLight: '#1A2E0A',
-    accentLimeText: '#A8D86A',
-    badgeGoodBg: '#1A2E0A',
-    badgeGoodText: '#A8D86A',
+  // Tertiaire — corail
+  coral: '#FA6855',
+  coralDeep: '#AD3124',
+  coralSoft: '#FFDAD5',
+  coralContainer: '#FFBDB3',
+  onCoral: '#8C180F',
 
-    hair: '#A78BFA',
-    hairLight: '#2E1065',
-    meds: '#34D399',
-    medsLight: '#064E3B',
-    anxiety: '#FB923C',
-    anxietyHigh: '#F87171',
-    anxietyLight: '#431407',
-    conflict: '#FB7185',
-    conflictLight: '#4C0519',
-    blood: '#EF4444',
-    bloodLight: '#450A0A',
-    henna: '#FBBF24',
-    hennaLight: '#451A03',
-    wash: '#22D3EE',
-    washLight: '#083344',
-    sleep: '#818CF8',
-    sleepLight: '#1E1B4B',
+  // Accent chaud (jauge)
+  amber: '#F39A38',
+  amberSoft: '#FFF1DC',
 
-    success: '#34D399',
-    warning: '#FBBF24',
-    danger: '#F87171',
-  },
+  error: '#BA1A1A',
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light;
+/** Couleurs des catégories d'événements (calendrier, pastilles). */
+export const CategoryColors = {
+  blood: Palette.coralDeep,
+  henna: '#C98A1A',
+  wash: '#3E8E7E',
+  stress: Palette.coral,
+  meds: Palette.primary,
+  haircut: '#5B5F5B',
+  sleep: '#5C6BC0',
+} as const;
+
+// Compatibilité avec use-theme.ts
+export const Colors = {
+  light: Palette,
+  dark: Palette,
+} as const;
 
 export const Radius = {
-  xs: 8,
-  sm: 12,
+  sm: 8,
   md: 16,
   lg: 24,
-  xl: 30,
-  xxl: 36,
+  xl: 28,
+  xxl: 32,
   full: 9999,
 } as const;
 
-export const CardShadow = {
-  shadowColor: '#1A2E14',
-  shadowOpacity: 0.05,
-  shadowRadius: 14,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 2,
-};
+export const Spacing = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  gutter: 12,
+  margin: 20,
+} as const;
+
+/** Niveaux d'élévation du design system. */
+export const Elevation = {
+  card: {
+    shadowColor: Palette.obsidian,
+    shadowOpacity: 0.05,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  dark: {
+    shadowColor: Palette.obsidian,
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
+  },
+  floating: {
+    shadowColor: '#121614',
+    shadowOpacity: 0.16,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 12,
+  },
+} as const;
+
+export const FontFamily = {
+  display: 'PlusJakartaSans_700Bold',
+  displayExtra: 'PlusJakartaSans_800ExtraBold',
+  headline: 'PlusJakartaSans_600SemiBold',
+  label: 'PlusJakartaSans_600SemiBold',
+  labelMedium: 'PlusJakartaSans_500Medium',
+  body: 'Inter_400Regular',
+  bodyMedium: 'Inter_500Medium',
+  bodySemi: 'Inter_600SemiBold',
+} as const;
+
+/** Échelle typographique (tokens Stitch). */
+export const Type = {
+  displayLg: { fontFamily: FontFamily.display, fontSize: 36, lineHeight: 42, letterSpacing: -0.8 },
+  headlineLg: { fontFamily: FontFamily.headline, fontSize: 28, lineHeight: 34, letterSpacing: -0.5 },
+  headlineMd: { fontFamily: FontFamily.headline, fontSize: 22, lineHeight: 28, letterSpacing: -0.3 },
+  headlineSm: { fontFamily: FontFamily.headline, fontSize: 18, lineHeight: 24, letterSpacing: -0.2 },
+  metric: { fontFamily: FontFamily.display, fontSize: 32, lineHeight: 38, letterSpacing: -0.6 },
+  bodyLg: { fontFamily: FontFamily.body, fontSize: 16, lineHeight: 24 },
+  bodyMd: { fontFamily: FontFamily.body, fontSize: 14, lineHeight: 20 },
+  bodySm: { fontFamily: FontFamily.body, fontSize: 12, lineHeight: 16 },
+  labelMd: { fontFamily: FontFamily.label, fontSize: 13, lineHeight: 18 },
+  labelSm: { fontFamily: FontFamily.label, fontSize: 11, lineHeight: 14 },
+} as const;
 
 export const Fonts = Platform.select({
-  ios: {
-    sans: 'system-ui',
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
+  ios: { sans: 'system-ui', serif: 'ui-serif', rounded: 'ui-rounded', mono: 'ui-monospace' },
+  default: { sans: 'normal', serif: 'serif', rounded: 'normal', mono: 'monospace' },
   web: {
     sans: 'var(--font-display)',
     serif: 'var(--font-serif)',
@@ -132,15 +147,6 @@ export const Fonts = Platform.select({
   },
 });
 
-export const Spacing = {
-  half: 2,
-  one: 4,
-  two: 8,
-  three: 16,
-  four: 24,
-  five: 32,
-  six: 64,
-} as const;
-
-export const BottomTabInset = Platform.select({ ios: 60, android: 75 }) ?? 60;
-export const MaxContentWidth = 800;
+/** Espace à réserver en bas des écrans pour le dock de navigation flottant. */
+export const DockClearance = 112;
+export const MaxContentWidth = 640;

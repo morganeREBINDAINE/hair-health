@@ -1,768 +1,533 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
-} from 'react-native';
-import { Calendar, LocaleConfig } from 'react-native-calendars';
+import React, { useState, useCallback } from 'react';
+import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
+import { Calendar } from 'react-native-calendars';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
-  Scissors,
   Pill,
-  Droplet,
-  Sparkles,
-  Zap,
+  ShowerHead,
   Activity,
-  Calendar as CalendarIcon,
-  ChevronRight,
-  Filter,
-  CheckCircle2,
-  Plus,
+  Leaf,
+  Scissors,
   Moon,
+  Microscope,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  CirclePlus,
+  CircleCheck,
+  Frown,
+  Hash,
+  type LucideIcon,
 } from 'lucide-react-native';
-import { Colors } from '../constants/theme';
+import { Palette, Spacing, DockClearance, Radius, CategoryColors, Type, Elevation } from '../constants/theme';
 import { StorageService } from '../services/storageService';
-import { DailyLog, FatigueLevel, LabTest } from '../types';
+import { DailyLog, LabTest } from '../types';
+import { AppText, Badge, Card, Chip, IconCircle, PillButton, ScreenHeader } from '../components/ui';
+import { todayIso, shiftIso, dayShort, dayNum, monthTitle, longDay } from '../lib/dates';
+import '../lib/calendarLocale';
 
-// Configuration locale en français pour react-native-calendars
-LocaleConfig.locales['fr'] = {
-  monthNames: [
-    'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
-    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
-  ],
-  monthNamesShort: ['Janv.', 'Févr.', 'Mars', 'Avril', 'Mai', 'Juin', 'Juil.', 'Août', 'Sept.', 'Oct.', 'Nov.', 'Déc.'],
-  dayNames: ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'],
-  dayNamesShort: ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'],
-  today: "Aujourd'hui"
-};
-LocaleConfig.defaultLocale = 'fr';
+type Category = 'all' | 'meds' | 'care' | 'henna' | 'blood' | 'emotion' | 'sleep';
 
-interface FilterState {
-  showMeds: boolean;
-  showHaircut: boolean;
-  showWash: boolean;
-  showHenna: boolean;
-  showStress: boolean;
-  showBloodTest: boolean;
-  showSleep: boolean;
+const COLOR_LEGEND = [
+  { label: 'Traitements', color: CategoryColors.meds },
+  { label: 'Soins', color: CategoryColors.wash },
+  { label: 'Henné', color: CategoryColors.henna },
+  { label: 'Émotionnel', color: CategoryColors.stress },
+  { label: 'Sommeil', color: CategoryColors.sleep },
+  { label: 'Bilan sanguin', color: CategoryColors.blood },
+];
+
+const CATEGORIES: { id: Category; label: string; icon?: LucideIcon }[] = [
+  { id: 'all', label: 'Tout' },
+  { id: 'meds', label: 'Traitements', icon: Pill },
+  { id: 'care', label: 'Soins', icon: Scissors },
+  { id: 'henna', label: 'Henné', icon: Leaf },
+  { id: 'blood', label: 'Bilan', icon: Microscope },
+  { id: 'emotion', label: 'Émotionnel', icon: Activity },
+  { id: 'sleep', label: 'Fatigue', icon: Moon },
+];
+
+/** Catégories présentes pour une journée — sert aux pastilles et aux cartes. */
+function dayCategories(log: DailyLog | undefined, hasBlood: boolean) {
+  const cats: { key: Exclude<Category, 'all'>; color: string }[] = [];
+  if (hasBlood) cats.push({ key: 'blood', color: CategoryColors.blood });
+  if (log?.medications?.some((m) => m.taken)) cats.push({ key: 'meds', color: CategoryColors.meds });
+  if (log && (log.hairWashDone || log.haircutDone || log.hairLossAmount != null))
+    cats.push({ key: 'care', color: CategoryColors.wash });
+  if (log?.hennaDone) cats.push({ key: 'henna', color: CategoryColors.henna });
+  if (log && (log.conflictWithHusband || log.lumpInThroat || (log.anxietyScore ?? 0) >= 5))
+    cats.push({ key: 'emotion', color: CategoryColors.stress });
+  if (log && (log.fatigueLevel === 'importante' || log.fatigueLevel === 'modérée' || log.sleepHours != null))
+    cats.push({ key: 'sleep', color: CategoryColors.sleep });
+  return cats;
 }
+
+const anxietyLevel = (s: number) => (s >= 9 ? 'Aigu' : s >= 7 ? 'Élevé' : s >= 4 ? 'Modéré' : s >= 1 ? 'Léger' : 'Paisible');
 
 export default function CalendarScreen() {
   const router = useRouter();
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
+  const todayStr = todayIso();
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [showMonth, setShowMonth] = useState(false);
+  const [category, setCategory] = useState<Category>('all');
   const [logs, setLogs] = useState<Record<string, DailyLog>>({});
   const [labTests, setLabTests] = useState<LabTest[]>([]);
 
-  // Filtres d'affichage des icônes
-  const [filters, setFilters] = useState<FilterState>({
-    showMeds: true,
-    showHaircut: true,
-    showWash: true,
-    showHenna: true,
-    showStress: true,
-    showBloodTest: true,
-    showSleep: true,
-  });
-
-  const colors = Colors.light;
-
   const loadData = useCallback(async () => {
     try {
-      const allLogs = await StorageService.getAllDailyLogs();
-      const tests = await StorageService.getLabTests();
-      setLogs(allLogs || {});
-      setLabTests(tests || []);
+      setLogs((await StorageService.getAllDailyLogs()) || {});
+      setLabTests((await StorageService.getLabTests()) || []);
     } catch (e) {
       console.error('Erreur chargement calendrier:', e);
     }
   }, []);
 
-  // Recharger dès que l'écran reprend le focus
   useFocusEffect(
     useCallback(() => {
       loadData();
     }, [loadData])
   );
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // Construction des pastilles d'événements pour chaque date
-  const bloodTestDates = new Set(labTests.map((t) => t.date));
-  const allDates = new Set([...Object.keys(logs), ...bloodTestDates]);
-
-  const markedDates: Record<string, { dots: { key: string; color: string }[] }> = {};
-
-  allDates.forEach((date) => {
-    const log = logs[date];
-    const hasBlood = bloodTestDates.has(date);
-    const dots: { key: string; color: string }[] = [];
-
-    // 1. Prise de sang (Rouge vif)
-    if (filters.showBloodTest && hasBlood) {
-      dots.push({ key: 'blood', color: '#DC2626' });
-    }
-    // 2. Henné (Ambre / Caramel)
-    if (filters.showHenna && log?.hennaDone) {
-      dots.push({ key: 'henna', color: '#D97706' });
-    }
-    // 3. Shampoing (Cyan)
-    if (filters.showWash && log?.hairWashDone) {
-      dots.push({ key: 'wash', color: '#06B6D4' });
-    }
-    // 4. Stress / Disputé / Boule gorge (Corail)
-    if (filters.showStress && (log?.conflictWithHusband || log?.lumpInThroat || (log?.anxietyScore !== null && log?.anxietyScore !== undefined && log.anxietyScore >= 5))) {
-      dots.push({ key: 'stress', color: '#F43F5E' });
-    }
-    // 5. Compléments pris (Émeraude)
-    if (filters.showMeds && log?.medications?.some((m) => m.taken)) {
-      dots.push({ key: 'meds', color: '#10B981' });
-    }
-    // 6. Coupe de cheveux (Violet)
-    if (filters.showHaircut && log?.haircutDone) {
-      dots.push({ key: 'haircut', color: '#8B5CF6' });
-    }
-    // 7. Fatigue importante/modérée (Indigo)
-    if (filters.showSleep && (log?.fatigueLevel === 'importante' || log?.fatigueLevel === 'modérée')) {
-      dots.push({ key: 'sleep', color: '#6366F1' });
-    }
-
-    if (dots.length > 0) {
-      markedDates[date] = { dots };
-    }
-  });
-
+  const bloodByDate = new Map(labTests.map((t) => [t.date, t]));
   const selectedLog = logs[selectedDate];
-  const selectedBloodTest = labTests.find((t) => t.date === selectedDate);
+  const selectedBlood = bloodByDate.get(selectedDate);
+  const selectedCats = dayCategories(selectedLog, !!selectedBlood);
+  const visible = (c: Exclude<Category, 'all'>) =>
+    (category === 'all' || category === c) && selectedCats.some((x) => x.key === c);
 
-  const toggleFilter = (key: keyof FilterState) => {
-    setFilters((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
+  const stripDays = Array.from({ length: 5 }).map((_, i) => shiftIso(selectedDate, i - 2));
+
+  const goToEntry = () => router.push({ pathname: '/entry', params: { date: selectedDate } });
+
+  const takenMeds = selectedLog?.medications.filter((m) => m.taken) ?? [];
+  const anyVisible = (['meds', 'care', 'henna', 'blood', 'emotion', 'sleep'] as const).some(visible);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Barre de Filtres */}
-        <View style={styles.filterSection}>
-          <View style={styles.filterHeader}>
-            <Filter size={16} color={colors.textSecondary} />
-            <Text style={styles.filterTitle}>Filtres d'affichage sur le calendrier :</Text>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterBar}>
-            <TouchableOpacity
-              onPress={() => toggleFilter('showMeds')}
-              style={[styles.filterChip, filters.showMeds && { backgroundColor: colors.medsLight, borderColor: colors.meds }]}>
-              <Pill size={14} color={filters.showMeds ? colors.meds : colors.textMuted} />
-              <Text style={[styles.filterText, filters.showMeds && { color: colors.meds, fontWeight: '700' }]}>
-                Médicaments
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => toggleFilter('showHaircut')}
-              style={[styles.filterChip, filters.showHaircut && { backgroundColor: colors.hairLight, borderColor: colors.hair }]}>
-              <Scissors size={14} color={filters.showHaircut ? colors.hair : colors.textMuted} />
-              <Text style={[styles.filterText, filters.showHaircut && { color: colors.hair, fontWeight: '700' }]}>
-                Coupe
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => toggleFilter('showWash')}
-              style={[styles.filterChip, filters.showWash && { backgroundColor: colors.washLight, borderColor: colors.wash }]}>
-              <Droplet size={14} color={filters.showWash ? colors.wash : colors.textMuted} />
-              <Text style={[styles.filterText, filters.showWash && { color: colors.wash, fontWeight: '700' }]}>
-                Shampoing
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => toggleFilter('showHenna')}
-              style={[styles.filterChip, filters.showHenna && { backgroundColor: colors.hennaLight, borderColor: colors.henna }]}>
-              <Sparkles size={14} color={filters.showHenna ? colors.henna : colors.textMuted} />
-              <Text style={[styles.filterText, filters.showHenna && { color: colors.henna, fontWeight: '700' }]}>
-                Henné
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => toggleFilter('showStress')}
-              style={[styles.filterChip, filters.showStress && { backgroundColor: colors.conflictLight, borderColor: colors.danger }]}>
-              <Zap size={14} color={filters.showStress ? colors.danger : colors.textMuted} />
-              <Text style={[styles.filterText, filters.showStress && { color: colors.danger, fontWeight: '700' }]}>
-                Stress/Dispute
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => toggleFilter('showBloodTest')}
-              style={[styles.filterChip, filters.showBloodTest && { backgroundColor: colors.bloodLight, borderColor: colors.blood }]}>
-              <Activity size={14} color={filters.showBloodTest ? colors.blood : colors.textMuted} />
-              <Text style={[styles.filterText, filters.showBloodTest && { color: colors.blood, fontWeight: '700' }]}>
-                Prise de sang
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => toggleFilter('showSleep')}
-              style={[styles.filterChip, filters.showSleep && { backgroundColor: colors.sleepLight, borderColor: colors.sleep }]}>
-              <Moon size={14} color={filters.showSleep ? colors.sleep : colors.textMuted} />
-              <Text style={[styles.filterText, filters.showSleep && { color: colors.sleep, fontWeight: '700' }]}>
-                Fatigue
-              </Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-
-        {/* Composant Calendrier */}
-        <View style={styles.calendarContainer}>
-          <Calendar
-            current={selectedDate}
-            onDayPress={(day: any) => setSelectedDate(day.dateString)}
-            dayComponent={({ date, state }: any) => {
-              if (!date) return null;
-              const isSelected = date.dateString === selectedDate;
-              const isToday = date.dateString === todayStr;
-              const isDiffMonth = state === 'disabled';
-              const dayMarking = markedDates[date.dateString];
-              const dots = dayMarking?.dots || [];
-
-              return (
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => setSelectedDate(date.dateString)}
-                  style={[
-                    styles.dayCell,
-                    isSelected && styles.dayCellSelected,
-                    isToday && !isSelected && styles.dayCellToday,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.dayText,
-                      isSelected && styles.dayTextSelected,
-                      isToday && !isSelected && styles.dayTextToday,
-                      isDiffMonth && styles.dayTextDisabled,
-                    ]}>
-                    {date.day}
-                  </Text>
-                  <View style={styles.dotsRow}>
-                    {dots.slice(0, 5).map((dot, idx) => (
-                      <View
-                        key={`${dot.key}-${idx}`}
-                        style={[styles.dotIndicator, { backgroundColor: dot.color }]}
-                      />
-                    ))}
-                  </View>
-                </TouchableOpacity>
-              );
-            }}
-            theme={{
-              backgroundColor: '#FFFFFF',
-              calendarBackground: '#FFFFFF',
-              textSectionTitleColor: '#94A3B8',
-              arrowColor: '#17191C',
-              monthTextColor: '#17191C',
-              textMonthFontWeight: '800',
-              textMonthFontSize: 17,
-            }}
-          />
-        </View>
-
-        {/* Légende visuelle des pastilles */}
-        <View style={styles.legendCard}>
-          <Text style={styles.legendHeader}>Légende des couleurs</Text>
-          <View style={styles.legendGrid}>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#DC2626' }]} />
-              <Text style={styles.legendLabel}>Prise de sang</Text>
+    <View style={styles.screen}>
+      <ScreenHeader title="Calendrier" />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Mois + sélecteur de jour */}
+        <View style={{ gap: 14 }}>
+          <View style={styles.rowBetween}>
+            <View>
+              <AppText variant="labelMd" color={Palette.textVariant}>
+                Planning & rituels
+              </AppText>
+              <AppText variant="headlineMd">{monthTitle(selectedDate)}</AppText>
             </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#D97706' }]} />
-              <Text style={styles.legendLabel}>Henné</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#06B6D4' }]} />
-              <Text style={styles.legendLabel}>Shampoing</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#F43F5E' }]} />
-              <Text style={styles.legendLabel}>Stress / Gorge</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
-              <Text style={styles.legendLabel}>Compléments</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#8B5CF6' }]} />
-              <Text style={styles.legendLabel}>Coupe</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: '#6366F1' }]} />
-              <Text style={styles.legendLabel}>Fatigue</Text>
+            <View style={styles.headerActions}>
+              <RoundButton icon={ChevronLeft} onPress={() => setSelectedDate(shiftIso(selectedDate, -7))} />
+              <RoundButton icon={ChevronRight} onPress={() => setSelectedDate(shiftIso(selectedDate, 7))} />
+              <RoundButton icon={CalendarDays} active={showMonth} onPress={() => setShowMonth((v) => !v)} />
             </View>
           </View>
-        </View>
 
-        {/* Détail de la journée sélectionnée */}
-        <View style={styles.detailCard}>
-          <View style={styles.detailHeader}>
-            <View style={styles.detailTitleRow}>
-              <CalendarIcon size={18} color="#17191C" />
-              <Text style={styles.detailTitle}>Journée du {selectedDate}</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => router.push('/entry')}>
-              <Text style={styles.editButtonText}>Ouvrir Saisie</Text>
-              <ChevronRight size={14} color="#17191C" />
-            </TouchableOpacity>
-          </View>
-
-          {!selectedLog && !selectedBloodTest ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>Aucune donnée enregistrée pour cette date.</Text>
-              <TouchableOpacity
-                style={styles.quickAddDayBtn}
-                onPress={() => router.push('/entry')}>
-                <Plus size={15} color="#FFFFFF" />
-                <Text style={styles.quickAddDayBtnText}>Saisir pour ce jour</Text>
-              </TouchableOpacity>
-            </View>
+          {showMonth ? (
+            <Card style={{ padding: 10 }}>
+              <Calendar
+                key={selectedDate.slice(0, 7)}
+                current={selectedDate}
+                onDayPress={(day: { dateString: string }) => setSelectedDate(day.dateString)}
+                firstDay={1}
+                dayComponent={({ date, state }: any) => {
+                  if (!date) return null;
+                  const iso: string = date.dateString;
+                  const isSelected = iso === selectedDate;
+                  const isToday = iso === todayStr;
+                  const dots = dayCategories(logs[iso], bloodByDate.has(iso)).filter(
+                    (c) => category === 'all' || c.key === category
+                  );
+                  return (
+                    <Pressable
+                      onPress={() => {
+                        setSelectedDate(iso);
+                        setShowMonth(false);
+                      }}
+                      style={[styles.monthDay, isSelected && styles.monthDaySelected, isToday && !isSelected && styles.monthDayToday]}>
+                      <AppText
+                        variant="labelMd"
+                        color={state === 'disabled' ? Palette.outlineVariant : Palette.text}>
+                        {date.day}
+                      </AppText>
+                      <View style={styles.dotsRow}>
+                        {dots.slice(0, 4).map((d) => (
+                          <View key={d.key} style={[styles.dot, { backgroundColor: isSelected ? Palette.obsidian : d.color }]} />
+                        ))}
+                      </View>
+                    </Pressable>
+                  );
+                }}
+                theme={{
+                  calendarBackground: 'transparent',
+                  textSectionTitleColor: Palette.textMuted,
+                  arrowColor: Palette.obsidian,
+                  monthTextColor: Palette.text,
+                  textMonthFontFamily: Type.headlineSm.fontFamily,
+                  textDayHeaderFontFamily: Type.labelSm.fontFamily,
+                  textMonthFontSize: 16,
+                }}
+              />
+            </Card>
           ) : (
-            <View style={styles.summaryList}>
-              {/* Sommeil */}
-              {selectedLog?.sleepHours !== null && selectedLog?.sleepHours !== undefined && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Sommeil :</Text>
-                  <View style={[styles.badgePill, { backgroundColor: '#EEF2FF' }]}>
-                    <Text style={[styles.summaryValue, { color: '#6366F1', fontWeight: '700' }]}>
-                      🌙 {selectedLog.sleepHours}h
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Fatigue */}
-              {selectedLog?.fatigueLevel && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Fatigue au réveil :</Text>
-                  <View style={[styles.badgePill, {
-                    backgroundColor: selectedLog.fatigueLevel === 'importante' ? '#FEF2F2'
-                      : selectedLog.fatigueLevel === 'modérée' ? '#FFF7ED'
-                      : selectedLog.fatigueLevel === 'légère' ? '#FFFBEB'
-                      : '#ECFDF5',
-                  }]}>
-                    <Text style={[styles.summaryValue, {
-                      color: selectedLog.fatigueLevel === 'importante' ? '#DC2626'
-                        : selectedLog.fatigueLevel === 'modérée' ? '#EA580C'
-                        : selectedLog.fatigueLevel === 'légère' ? '#D97706'
-                        : '#059669',
-                      fontWeight: '700',
-                      textTransform: 'capitalize',
-                    }]}>
-                      {selectedLog.fatigueLevel}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Chute de cheveux */}
-              {selectedLog?.hairLossAmount !== null && selectedLog?.hairLossAmount !== undefined && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Perte de cheveux :</Text>
-                  <View style={styles.badgePill}>
-                    <Text style={[styles.summaryValue, { color: '#7C3AED', fontWeight: '700' }]}>
-                      ~{selectedLog.hairLossAmount} cheveux
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Shampoing */}
-              {selectedLog?.hairWashDone && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Shampoing fait :</Text>
-                  <View style={[styles.badgePill, { backgroundColor: '#ECFEFF' }]}>
-                    <Text style={[styles.summaryValue, { color: '#0891B2' }]}>
-                      💧 {selectedLog.shampooType ? selectedLog.shampooType.replace('_', ' ') : 'Oui'}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Coupe */}
-              {selectedLog?.haircutDone && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Coupe effectuée :</Text>
-                  <View style={[styles.badgePill, { backgroundColor: '#F5F3FF' }]}>
-                    <Text style={[styles.summaryValue, { color: '#7C3AED' }]}>
-                      ✂️ {selectedLog.haircutNotes ? selectedLog.haircutNotes : 'Oui'}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Henné */}
-              {selectedLog?.hennaDone && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Soin Henné :</Text>
-                  <View style={[styles.badgePill, { backgroundColor: '#FEF3C7' }]}>
-                    <Text style={[styles.summaryValue, { color: '#B45309', fontWeight: '600' }]}>🌿 Oui</Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Stress / Dispute */}
-              {selectedLog?.anxietyScore !== null && selectedLog?.anxietyScore !== undefined && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Anxiété :</Text>
-                  <View style={[styles.badgePill, { backgroundColor: selectedLog.anxietyScore >= 6 ? '#FEE2E2' : '#FFF7ED' }]}>
-                    <Text style={[styles.summaryValue, { color: selectedLog.anxietyScore >= 6 ? '#DC2626' : '#EA580C', fontWeight: '700' }]}>
-                      ⚡ {selectedLog.anxietyScore} / 10
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {selectedLog?.lumpInThroat && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Boule dans la gorge :</Text>
-                  <View style={[styles.badgePill, { backgroundColor: '#FEE2E2' }]}>
-                    <Text style={[styles.summaryValue, { color: '#DC2626', fontWeight: '600' }]}>Présente</Text>
-                  </View>
-                </View>
-              )}
-
-              {selectedLog?.conflictWithHusband && (
-                <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Dispute de couple :</Text>
-                  <View style={[styles.badgePill, { backgroundColor: '#FFE4E6' }]}>
-                    <Text style={[styles.summaryValue, { color: '#E11D48', fontWeight: '700' }]}>Oui</Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Compléments pris */}
-              {selectedLog?.medications && selectedLog.medications.some((m) => m.taken) && (
-                <View style={styles.medsSummaryBox}>
-                  <Text style={styles.medsSummaryTitle}>Compléments pris ce jour :</Text>
-                  <View style={styles.medsChips}>
-                    {selectedLog.medications
-                      .filter((m) => m.taken)
-                      .map((m) => (
-                        <View key={m.name} style={styles.medChip}>
-                          <Text style={styles.medChipText}>
-                            ✓ {m.name} {m.dosage ? `(${m.dosage})` : ''}
-                          </Text>
-                        </View>
-                      ))}
-                  </View>
-                </View>
-              )}
-
-              {/* Bilan sanguin */}
-              {selectedBloodTest && (
-                <View style={styles.bloodTestBox}>
-                  <Text style={styles.bloodTestBoxTitle}>🩸 Prise de sang enregistrée ce jour</Text>
-                  {selectedBloodTest.notes ? (
-                    <Text style={styles.bloodTestNotes}>{selectedBloodTest.notes}</Text>
-                  ) : null}
-                </View>
-              )}
+            <View style={styles.stripRow}>
+              {stripDays.map((item) => {
+                const active = item === selectedDate;
+                const hasData = !!logs[item] || bloodByDate.has(item);
+                return (
+                  <Pressable
+                    key={item}
+                    onPress={() => setSelectedDate(item)}
+                    style={[styles.dayPill, active ? styles.dayPillActive : styles.dayPillIdle]}>
+                    <AppText variant="labelSm" color={active ? Palette.obsidian : Palette.textMuted}>
+                      {dayShort(item)}
+                    </AppText>
+                    <AppText variant="headlineSm" color={active ? Palette.obsidian : Palette.text}>
+                      {dayNum(item)}
+                    </AppText>
+                    <View
+                      style={[
+                        styles.dot,
+                        { backgroundColor: hasData ? (active ? Palette.obsidian : Palette.primary) : 'transparent' },
+                      ]}
+                    />
+                  </Pressable>
+                );
+              })}
             </View>
           )}
         </View>
+
+        {/* Catégories */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsScroll}>
+          {CATEGORIES.map((c) => (
+            <Chip
+              key={c.id}
+              label={c.label}
+              icon={c.icon}
+              selected={category === c.id}
+              count={c.id === 'all' ? selectedCats.length : undefined}
+              onPress={() => setCategory(c.id)}
+            />
+          ))}
+        </ScrollView>
+
+        {/* Légende couleurs */}
+        <View style={styles.legendRow}>
+          {COLOR_LEGEND.map((item) => (
+            <View key={item.label} style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+              <AppText variant="bodySm" color={Palette.textMuted}>{item.label}</AppText>
+            </View>
+          ))}
+        </View>
+
+        {/* Chronologie du jour */}
+        <View style={{ gap: 12 }}>
+          <View style={styles.rowBetween}>
+            <View style={styles.inline}>
+              <View style={[styles.dot, { width: 8, height: 8, backgroundColor: Palette.lime }]} />
+              <AppText variant="labelMd">{longDay(selectedDate)}</AppText>
+            </View>
+            <AppText variant="bodySm" color={Palette.textMuted}>
+              {selectedCats.length} enregistrement{selectedCats.length > 1 ? 's' : ''}
+            </AppText>
+          </View>
+
+          {!anyVisible && (
+            <Card style={styles.emptyCard}>
+              <IconCircle icon={CalendarDays} size={48} />
+              <AppText variant="bodyMd" color={Palette.textMuted} style={{ textAlign: 'center' }}>
+                {selectedCats.length === 0
+                  ? 'Aucune donnée enregistrée pour cette date.'
+                  : 'Rien dans cette catégorie ce jour-là.'}
+              </AppText>
+            </Card>
+          )}
+
+          {visible('meds') && (
+            <Card style={{ gap: 14 }}>
+              <View style={styles.rowBetween}>
+                <View style={styles.inlineLg}>
+                  <IconCircle icon={Pill} size={44} bg={Palette.limeSoft} color={Palette.primary} />
+                  <View>
+                    <AppText variant="headlineSm" style={{ fontSize: 16 }}>
+                      Compléments
+                    </AppText>
+                    <AppText variant="bodySm" color={Palette.textMuted}>
+                      {takenMeds.length} produit{takenMeds.length > 1 ? 's' : ''} pris
+                    </AppText>
+                  </View>
+                </View>
+                <Badge label="Pris" tone="lime" dot />
+              </View>
+              <View style={styles.wrap}>
+                {takenMeds.map((m) => (
+                  <View key={m.name} style={styles.medTag}>
+                    <AppText variant="bodySm" color={Palette.textVariant}>
+                      {m.name}
+                      {m.dosage ? ` · ${m.dosage}` : ''}
+                    </AppText>
+                  </View>
+                ))}
+              </View>
+            </Card>
+          )}
+
+          {visible('care') && (selectedLog?.hairWashDone || selectedLog?.hairLossAmount != null) && (
+            <Card dark style={{ gap: 16 }}>
+              <View style={styles.rowBetween}>
+                <View style={styles.inlineLg}>
+                  <IconCircle icon={ShowerHead} size={44} bg="rgba(255,255,255,0.1)" color={Palette.limeFixed} />
+                  <View style={{ flexShrink: 1 }}>
+                    <View style={styles.inline}>
+                      <AppText variant="headlineSm" color="#FFFFFF" style={{ fontSize: 16 }}>
+                        {selectedLog?.hairWashDone ? 'Lavage & soin' : 'Chute de cheveux'}
+                      </AppText>
+                      {selectedLog?.hairWashDone && <Badge label="Jour J" tone="lime" />}
+                    </View>
+                    <AppText variant="bodySm" color={Palette.obsidianMuted}>
+                      {selectedLog?.hairWashDone
+                        ? `Shampoing ${selectedLog.shampooType ? selectedLog.shampooType.replace('_', ' ') : ''}`.trim()
+                        : 'Estimation du jour'}
+                    </AppText>
+                  </View>
+                </View>
+              </View>
+              {selectedLog?.hairLossAmount != null && (
+                <View style={styles.darkFooter}>
+                  <View style={styles.inline}>
+                    <Hash size={15} color={Palette.obsidianMuted} />
+                    <AppText variant="bodySm" color={Palette.obsidianText}>
+                      Perte estimée : ~{selectedLog.hairLossAmount} cheveux
+                    </AppText>
+                  </View>
+                  <Badge
+                    label={selectedLog.hairLossAmount <= 50 ? 'Normal' : selectedLog.hairLossAmount <= 100 ? 'Modéré' : 'Élevé'}
+                    tone={selectedLog.hairLossAmount <= 50 ? 'light' : 'coral'}
+                    icon={selectedLog.hairLossAmount <= 50 ? CircleCheck : undefined}
+                  />
+                </View>
+              )}
+            </Card>
+          )}
+
+          {visible('emotion') && selectedLog && (
+            <Card style={[styles.coralCard, { gap: 12 }]}>
+              <View style={styles.rowBetween}>
+                <View style={styles.inlineLg}>
+                  <IconCircle icon={Activity} size={44} bg={Palette.coralSoft} color={Palette.coralDeep} />
+                  <View>
+                    <View style={styles.inline}>
+                      <AppText variant="headlineSm" style={{ fontSize: 16 }}>
+                        Anxiété
+                      </AppText>
+                      {selectedLog.anxietyScore != null && (
+                        <Badge label={`${selectedLog.anxietyScore} / 10`} tone="coral" />
+                      )}
+                    </View>
+                    <AppText variant="bodySm" color={Palette.textMuted}>
+                      Impact cortisol surveillé
+                    </AppText>
+                  </View>
+                </View>
+                {selectedLog.anxietyScore != null && (
+                  <Badge label={anxietyLevel(selectedLog.anxietyScore)} tone="coralSoft" />
+                )}
+              </View>
+              {(selectedLog.lumpInThroat || selectedLog.conflictWithHusband) && (
+                <View style={styles.coralNote}>
+                  <Frown size={18} color={Palette.coralDeep} />
+                  <View style={{ flex: 1 }}>
+                    <AppText variant="labelSm" color={Palette.onCoral}>
+                      Sensations & événements
+                    </AppText>
+                    <AppText variant="bodySm" color={Palette.textVariant}>
+                      {[selectedLog.lumpInThroat && 'Boule dans la gorge', selectedLog.conflictWithHusband && 'Dispute de couple']
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </AppText>
+                  </View>
+                </View>
+              )}
+            </Card>
+          )}
+
+          {visible('henna') && (
+            <SmallEventCard icon={Leaf} color={CategoryColors.henna} title="Soin henné" subtitle="Gaine kératine" badge="Fait" />
+          )}
+
+          {visible('care') && selectedLog?.haircutDone && (
+            <SmallEventCard
+              icon={Scissors}
+              color={CategoryColors.haircut}
+              title="Coupe de cheveux"
+              subtitle={selectedLog.haircutNotes || 'Coupe effectuée'}
+              badge="Fait"
+            />
+          )}
+
+          {visible('sleep') && selectedLog && (
+            <SmallEventCard
+              icon={Moon}
+              color={CategoryColors.sleep}
+              title="Sommeil & fatigue"
+              subtitle={[
+                selectedLog.sleepHours != null && `${selectedLog.sleepHours} h de sommeil`,
+                selectedLog.fatigueLevel && `Fatigue ${selectedLog.fatigueLevel}`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+              badge={selectedLog.sleepHours != null ? `${selectedLog.sleepHours} h` : undefined}
+            />
+          )}
+
+          {visible('blood') && selectedBlood && (
+            <SmallEventCard
+              icon={Microscope}
+              color={CategoryColors.blood}
+              title="Prise de sang"
+              subtitle={selectedBlood.notes || `${Object.keys(selectedBlood.values).length} valeurs enregistrées`}
+              badge="Bilan"
+              onPress={() => router.push('/norms')}
+            />
+          )}
+        </View>
+
+        <PillButton label="Ajouter une entrée pour ce jour" icon={CirclePlus} onPress={goToEntry} />
       </ScrollView>
-    </SafeAreaView>
+    </View>
+  );
+}
+
+function RoundButton({ icon: Icon, onPress, active }: { icon: LucideIcon; onPress: () => void; active?: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.roundBtn,
+        active && { backgroundColor: Palette.obsidian },
+        pressed && { transform: [{ scale: 0.94 }] },
+      ]}>
+      <Icon size={19} color={active ? '#FFFFFF' : Palette.text} />
+    </Pressable>
+  );
+}
+
+function SmallEventCard({
+  icon,
+  color,
+  title,
+  subtitle,
+  badge,
+  onPress,
+}: {
+  icon: LucideIcon;
+  color: string;
+  title: string;
+  subtitle: string;
+  badge?: string;
+  onPress?: () => void;
+}) {
+  return (
+    <Card onPress={onPress} style={styles.smallCard}>
+      <IconCircle icon={icon} size={44} color={color} bg={Palette.containerLow} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <AppText variant="labelMd" style={{ fontSize: 15 }}>
+          {title}
+        </AppText>
+        <AppText variant="bodySm" color={Palette.textMuted} numberOfLines={2}>
+          {subtitle}
+        </AppText>
+      </View>
+      {badge && <Badge label={badge} />}
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
+  screen: { flex: 1, backgroundColor: Palette.canvas },
+  content: {
+    paddingHorizontal: Spacing.margin,
+    paddingTop: 8,
+    paddingBottom: DockClearance,
+    gap: Spacing.lg,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+  },
+  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  inlineLg: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 },
+  headerActions: { flexDirection: 'row', gap: 6 },
+  roundBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Palette.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Elevation.card,
+  },
+  stripRow: { flexDirection: 'row', gap: 8, paddingVertical: 6 },
+  dayPill: {
     flex: 1,
-    backgroundColor: '#E4E8DB',
-  },
-  scrollContent: {
-    paddingBottom: 50,
-  },
-  filterSection: {
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#DDE4D8',
-  },
-  filterHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  filterTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8A9080',
-  },
-  filterBar: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  filterChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: '#EDF1E8',
-    borderWidth: 1.5,
-    borderColor: '#DDE4D8',
-  },
-  filterText: {
-    fontSize: 12,
-    color: '#8A9080',
-    fontWeight: '600',
-  },
-  calendarContainer: {
-    margin: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 30,
-    padding: 12,
-    shadowColor: '#1A2E14',
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  dayCell: {
-    width: 38,
-    height: 50,
+    height: 84,
+    borderRadius: Radius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
-    paddingVertical: 3,
+    gap: 4,
   },
-  dayCellSelected: {
-    backgroundColor: '#1A1C1F',
+  dayPillIdle: { backgroundColor: Palette.card, ...Elevation.card, elevation: 1 },
+  dayPillActive: {
+    backgroundColor: Palette.lime,
+    shadowColor: Palette.lime,
+    shadowOpacity: 0.45,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
-  dayCellToday: {
-    borderWidth: 2,
-    borderColor: '#A8D86A',
-  },
-  dayText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1A1C1F',
-  },
-  dayTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-  },
-  dayTextToday: {
-    color: '#5A8B2A',
-    fontWeight: '700',
-  },
-  dayTextDisabled: {
-    color: '#C8D4BE',
-  },
-  dotsRow: {
-    flexDirection: 'row',
+  dot: { width: 5, height: 5, borderRadius: 3 },
+  dotsRow: { flexDirection: 'row', gap: 2, height: 6, marginTop: 2 },
+  monthDay: {
+    width: 40,
+    height: 46,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 8,
-    marginTop: 3,
-    gap: 2,
   },
-  dotIndicator: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  legendCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 16,
-    shadowColor: '#1A2E14',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 1,
-  },
-  legendHeader: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8A9080',
-    marginBottom: 10,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-  },
-  legendGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: '28%',
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  legendLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  detailCard: {
-    marginHorizontal: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28,
-    padding: 20,
-    shadowColor: '#1A2E14',
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  detailHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F4EB',
-  },
-  detailTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  detailTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1A1C1F',
-    letterSpacing: -0.2,
-  },
-  editButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#EDF1E8',
+  monthDaySelected: { backgroundColor: Palette.lime },
+  monthDayToday: { borderWidth: 1.5, borderColor: Palette.obsidian },
+  chipsScroll: { marginHorizontal: -Spacing.margin },
+  chips: { gap: 8, paddingHorizontal: Spacing.margin, paddingVertical: 6 },
+  emptyCard: { alignItems: 'center', gap: 12, paddingVertical: 28 },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  medTag: {
+    backgroundColor: Palette.containerLow,
+    borderRadius: Radius.full,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
   },
-  editButtonText: {
-    fontSize: 12,
-    color: '#1A1C1F',
-    fontWeight: '700',
-  },
-  emptyContainer: {
-    paddingVertical: 24,
-    alignItems: 'center',
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: '#9BA89C',
-    fontStyle: 'italic',
-  },
-  quickAddDayBtn: {
+  darkFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#1A1C1F',
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
-  },
-  quickAddDayBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  summaryList: {
-    gap: 10,
-  },
-  summaryRow: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 4,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: Radius.full,
+    paddingLeft: 14,
+    paddingRight: 6,
+    paddingVertical: 6,
   },
-  summaryLabel: {
-    fontSize: 13,
-    color: '#637064',
-    fontWeight: '500',
-  },
-  badgePill: {
-    paddingHorizontal: 11,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: '#F5F3FF',
-  },
-  summaryValue: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  medsSummaryBox: {
-    marginTop: 8,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F4EB',
-  },
-  medsSummaryTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  medsChips: {
+  coralCard: { borderWidth: 1, borderColor: Palette.coralSoft },
+  coralNote: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+    gap: 10,
+    backgroundColor: '#FFF4F2',
+    borderRadius: Radius.lg,
+    padding: 12,
   },
-  medChip: {
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-  },
-  medChipText: {
-    fontSize: 11,
-    color: '#065F46',
-    fontWeight: '700',
-  },
-  bloodTestBox: {
-    marginTop: 8,
-    backgroundColor: '#FEF2F2',
-    padding: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  bloodTestBoxTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#991B1B',
-  },
-  bloodTestNotes: {
-    fontSize: 11,
-    color: '#B91C1C',
-    marginTop: 4,
-  },
+  smallCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.lg },
+  legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 4 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
 });
