@@ -1,5 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Toast } from '../lib/toast';
+import { SyncEvent } from '../lib/syncEvent';
+import { DataLoading } from '../components/DataLoader';
 import { View, StyleSheet, Pressable, ScrollView, TextInput, Modal, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import {
@@ -100,6 +102,7 @@ export default function NormsScreen() {
   const [showHidden, setShowHidden] = useState(false);
   const [markers, setMarkers] = useState<LabMarkerDefinition[]>([]);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   // Modal Ajout/Modification de Norme
   const [showMarkerModal, setShowMarkerModal] = useState(false);
@@ -124,12 +127,26 @@ export default function NormsScreen() {
 
   const loadAll = useCallback(async () => {
     try {
-      setMarkers(await StorageService.getLabMarkers());
-      setLabTests(await StorageService.getLabTests());
+      const [loadedMarkers, loadedTests] = await Promise.all([
+        StorageService.getLabMarkers(),
+        StorageService.getLabTests(),
+      ]);
+      setMarkers(loadedMarkers);
+      setLabTests(loadedTests);
     } catch (e) {
       console.error('Erreur chargement normes:', e);
+      Toast.error('Impossible de charger les normes');
+    } finally {
+      setInitialLoading(false);
     }
   }, []);
+
+  // Écran monté dès la connexion (lazy: false) : on se rafraîchit à chaque synchro cloud
+  useEffect(() => {
+    return SyncEvent.subscribe(() => {
+      loadAll();
+    });
+  }, [loadAll]);
 
   useFocusEffect(
     useCallback(() => {
@@ -308,6 +325,15 @@ export default function NormsScreen() {
   const withStatus = visibleMarkers.map((m) => ({ m, last: latest.get(m.id), status: statusOf(latest.get(m.id)?.value, m) }));
   const hiddenWithStatus = markers.filter((m) => m.hidden).map((m) => ({ m, last: latest.get(m.id), status: statusOf(latest.get(m.id)?.value, m) }));
   const markerMap = new Map(markers.map((m) => [m.id, m]));
+
+  if (initialLoading) {
+    return (
+      <View style={styles.screen}>
+        <ScreenHeader title="Normes bilan" />
+        <DataLoading />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>

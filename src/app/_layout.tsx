@@ -370,6 +370,8 @@ function AppRoot() {
         name="norms"
         options={{
           title: 'Normes',
+          // Monté dès la connexion pour que les normes soient prêtes avant le premier clic
+          lazy: false,
           tabBarIcon: ({ color, size }) => <FlaskConical size={size || 21} color={color} />,
         }}
       />
