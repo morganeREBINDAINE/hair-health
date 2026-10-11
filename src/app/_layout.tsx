@@ -243,6 +243,10 @@ function AppRoot() {
         hideSplash();
       }
 
+      if (event === 'SIGNED_OUT') {
+        StorageService.clearCache().catch(console.warn);
+      }
+
       if (newSession?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
         try {
           const { synced } = await StorageService.syncFromCloud(newSession.user.id);
