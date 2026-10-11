@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "hair-health-tracker",
+    "name": "Hair & Health Tracker",
     "slug": "hair-health-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,16 +8,17 @@
     "scheme": "hairhealthtracker",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#8EE341",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mrebindaine.hairhealthtracker"
     },
     "web": {
       "output": "single",
@@ -28,9 +29,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#191D1A",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 160
         }
       ],
       "expo-web-browser",
@@ -40,6 +41,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9224a893-dbb8-42fe-a525-8fa4a39aff7d"
+      }
     }
   }
 }
