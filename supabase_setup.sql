@@ -57,6 +57,8 @@ create table if not exists public.daily_logs (
   hair_wash_done boolean default false,
   shampoo_type text check (shampoo_type in ('bebe', 'sans_sulfate', 'avec_sulfate', 'traitant', null)),
   henna_done boolean default false,
+  sleep_hours numeric default null,
+  fatigue_level text check (fatigue_level in ('normal', 'légère', 'modérée', 'importante', null)),
   notes text default '',
   created_at timestamp with time zone default timezone('utc'::text, now()),
   updated_at timestamp with time zone default timezone('utc'::text, now()),
@@ -142,6 +144,29 @@ alter table public.lab_test_values enable row level security;
 
 create policy "Gestion des valeurs de prise de sang"
   on public.lab_test_values for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- 8. Plans de traitement (fond / cure)
+create table if not exists public.treatment_plans (
+  id text primary key,
+  user_id uuid references auth.users on delete cascade not null,
+  type text not null check (type in ('fond', 'cure')),
+  name text not null,
+  description text default '',
+  dosage text not null,
+  start_date date not null,
+  end_date date,
+  planned_blood_test jsonb,
+  is_active boolean default true,
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  updated_at timestamp with time zone default timezone('utc'::text, now())
+);
+
+alter table public.treatment_plans enable row level security;
+
+create policy "Gestion des plans de traitement"
+  on public.treatment_plans for all
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 

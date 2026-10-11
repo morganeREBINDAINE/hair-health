@@ -47,6 +47,7 @@ export interface LabMarkerDefinition {
   unit: string;
   description: string;
   displayOrder: number;
+  hidden?: boolean;
 }
 
 export interface LabTestValue {
@@ -78,6 +79,27 @@ export interface CalendarDaySummary {
   hennaDone: boolean;
   medsTakenCount: number;
   hasBloodTest: boolean;
+}
+
+export type TreatmentType = 'fond' | 'cure';
+
+export interface PlannedBloodTest {
+  date: string;
+  markerCodes: string[];
+}
+
+export interface TreatmentPlan {
+  id: string;
+  type: TreatmentType;
+  name: string;
+  description?: string;
+  dosage: string;
+  startDate: string;
+  endDate?: string;
+  plannedBloodTest?: PlannedBloodTest;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export type CalendarFilterType =
