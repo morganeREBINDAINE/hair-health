@@ -18,6 +18,7 @@ import type { Session } from '@supabase/supabase-js';
 import { StorageService } from '../services/storageService';
 import { supabase, createSessionFromUrl } from '../lib/supabase';
 import { Toast } from '../lib/toast';
+import { SyncEvent } from '../lib/syncEvent';
 import LoginScreen from '../components/LoginScreen';
 import { Palette, Elevation, Type } from '../constants/theme';
 
@@ -253,6 +254,8 @@ function AppRoot() {
           if (synced > 0) console.log(`[Sync] ${synced} entrée(s) restaurée(s) depuis le cloud`);
         } catch {
           Toast.error('Connexion internet requise pour récupérer vos données');
+        } finally {
+          SyncEvent.emit();
         }
       }
     });
