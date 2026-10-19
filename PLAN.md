@@ -211,77 +211,120 @@ erDiagram
 
 ### Phase 8 : Suivi Menstruel & Prédiction des Prochaines Règles (🩸 Goutte)
 
-> Statut : **en attente de validation** (choix A à D et questions ci-dessous).
+> Statut : **choix validés le 19/10/2026**. Deux points restent à confirmer (voir « Questions ouvertes »).
 
-**Objectif** : pendant chaque jour de règles, noter le **flux sur 10**, une **petite note** et la **douleur (présente / absente)**, puis prédire la date des prochaines règles.
+**Objectif** : chaque jour de règles, noter le **flux sur 10**, une **petite note** et la **douleur (présente / absente)**. Déclarer explicitement le **début** et la **fin** des règles (avec l'heure de fin). Prédire la date des prochaines règles et ne proposer la saisie qu'au bon moment.
 
-#### Choix architecturaux à valider
-- **A — Modèle de données**
-  - **A1 (recommandé)** : 3 colonnes dans `daily_logs` : `menstrual_flow int check (1..10)` (null = pas de règles), `menstrual_pain boolean`, `menstrual_note text`. Enregistrement atomique avec le reste de la journée ; synchro, cache, calendrier et export réutilisés tels quels.
-  - **A2** : table dédiée `menstrual_days` (`user_id, date, flow, pain, note`, RLS). Domaine isolé et extensible, mais nouvelle synchro/cache et 2 requêtes par journée (risque d'état partiel).
-- **B — Saisie**
-  - **B1 (recommandé)** : carte « Cycle menstruel » dans le Journal du jour, enregistrée par le bouton existant « Enregistrer la journée ».
-  - **B2** : écran dédié « Cycle » accessible depuis l'accueil (pas de 6ᵉ onglet).
-- **C — Données insuffisantes** : **C1 (recommandé)** cycle par défaut de 28 j avec mention « Estimation » / **C2** aucune prédiction avant 2 cycles.
-- **D — Activation** : **D1 (recommandé)** interrupteur « Suivi menstruel » dans Paramètres / **D2** toujours visible.
+#### Choix validés
+- **Données** : champs ajoutés à `daily_logs` (A1). Un seul enregistrement par journée, sans risque de sauvegarde partielle.
+- **Saisie** : carte « Cycle menstruel » dans le Journal du jour, enregistrée par le bouton « Enregistrer la journée » (B1).
+- **Prédiction sans historique suffisant** : cycle par défaut de **30 jours**, avec la mention « Estimation » (C1).
+- **Pas d'interrupteur** dans les Paramètres : la carte s'affiche selon les règles de visibilité ci-dessous.
+- **Flux de 1 à 10** : aucune donnée n'est enregistrée les jours sans règles (pas de 0 / spotting).
+- **Pas de notification** avant les règles prévues.
+- **Note** : 140 caractères maximum. **Douleur** : Absente / Présente.
+
+#### Modèle de données (`daily_logs`)
+
+```sql
+alter table public.daily_logs
+  add column if not exists menstrual_flow int check (menstrual_flow between 1 and 10),
+  add column if not exists menstrual_pain boolean,
+  add column if not exists menstrual_note text default '',
+  add column if not exists menstrual_ended_at time;
+```
+
+| Case cochée | Données enregistrées ce jour-là |
+|---|---|
+| « Règles aujourd'hui » seule | `menstrual_flow` (obligatoire), `menstrual_pain`, `menstrual_note` |
+| « Plus de règles » seule | `menstrual_ended_at` (heure, obligatoire). Pas de flux. |
+| Les deux | Règles le matin, arrêtées dans la journée : flux + douleur + note + heure de fin |
+| Aucune | Rien (tous les champs à `null`) |
+
+#### Carte « Cycle menstruel » dans le Journal du jour
+- Deux cases : **« Règles aujourd'hui »** et **« Plus de règles »**.
+- « Règles aujourd'hui » cochée → échelle de flux 1–10 (même composant que l'anxiété, avec un libellé : Très léger → Très abondant), douleur Absente / Présente (`Segmented`), note avec compteur `x/140`.
+- « Plus de règles » cochée → sélecteur d'heure (`@react-native-community/datetimepicker`, déjà installé).
+- « Règles aujourd'hui » est **pré-cochée** si la veille avait un flux déclaré et aucune fin. On peut la décocher.
+- **Erreurs affichées sous les champs** (bouton d'enregistrement bloqué tant qu'il y en a) :
+  - « Règles aujourd'hui » sans flux → « Indique l'intensité du flux (1 à 10). »
+  - « Plus de règles » sans heure → « Indique l'heure de fin des règles. »
+  - Heure de fin dans le futur (journée d'aujourd'hui) → « L'heure de fin ne peut pas être dans le futur. »
+  - Note > 140 caractères → « La note ne doit pas dépasser 140 caractères. »
+- Enregistrement : loader et bouton bloqué pendant l'envoi ; erreur réseau → toast 3 s et l'état précédent est conservé (`docs/STORAGE.md`).
+
+#### Visibilité de la carte (pour la date affichée dans le Journal)
+La carte est affichée **uniquement** si l'une de ces conditions est vraie :
+1. **Fenêtre prévue** : la date est dans la fenêtre estimée des prochaines règles (par défaut du 29ᵉ au 31ᵉ jour du cycle).
+2. **Retard** : la fenêtre est dépassée et aucunes règles n'ont été déclarées depuis. La carte reste proposée chaque jour jusqu'à la déclaration.
+3. **Règles en cours** : des règles ont commencé et aucune fin n'a été déclarée. La carte s'affiche chaque jour jusqu'à « Plus de règles ».
+4. **Journée déjà renseignée** : la date contient déjà des données de règles (pour pouvoir corriger un jour passé).
+
+Après la déclaration de fin, la carte disparaît jusqu'à la prochaine fenêtre estimée.
 
 #### Règles de calcul (`src/lib/cycle.ts`, fonctions pures)
-1. Jour de règles = journée avec un flux renseigné (1–10).
-2. Des jours de règles séparés par **≤ 2 jours** sans flux forment une même période (tolère un oubli de saisie).
-3. Longueur de cycle = écart entre deux débuts de période ; valeurs < 15 j ou > 60 j ignorées.
-4. Durée prédite = moyenne des **6 derniers cycles** valides (sinon 28 j, cf. choix C).
-5. Prochain début = début de la dernière période + durée prédite ; fenêtre ± écart-type (1 à 5 j) ; si la date est dépassée sans saisie → « En retard de X jours ».
-6. Durée des règles prédite = moyenne des dernières périodes (défaut 5 j), pour griser les jours prévus.
+1. **Période** : commence au premier jour avec flux qui suit une fin déclarée (ou le tout premier jour avec flux). Elle se termine au jour où « Plus de règles » est coché. Les jours non saisis entre le début et la fin font partie de la période.
+2. **Longueur d'un cycle** : écart entre deux débuts de période. Les valeurs < 15 j ou > 60 j sont ignorées (souvent un mois non saisi).
+3. **Durée de cycle prédite** : moyenne des **6 derniers cycles** valides, arrondie. Sans cycle complet → **30 jours** + mention « Estimation ».
+4. **Prochain début prédit** : début de la dernière période + durée prédite.
+5. **Fenêtre** : prédiction ± écart-type des cycles, limité entre 1 et 3 jours. Par défaut ± 1 jour, ce qui couvre ton cycle de 29 à 31 jours.
+6. **Retard** : fenêtre dépassée sans début déclaré → « En retard de X jours ».
 
-#### Étapes (avec A1 + B1 + C1 + D1)
-1. **Schéma** : colonnes ajoutées dans `supabase_setup.sql` + script de migration `alter table` à exécuter manuellement dans Supabase.
-2. **Types** : `DailyLog` += `menstrualFlow`, `menstrualPain`, `menstrualNote` (optionnels pour le cache existant) ; types `Period` et `CyclePrediction`.
-3. **Persistance** (`storageService.ts`) : `saveDailyLog` et `syncFromCloud` gèrent les 3 colonnes, conformément à `docs/STORAGE.md` (cloud d'abord, aucune file locale).
-4. **Logique de cycle** : `src/lib/cycle.ts` (`getPeriods`, `predictNextPeriod`) basé sur `src/lib/dates.ts`.
-5. **Journal du jour** (`DailyEntryForm.tsx`) : interrupteur « Règles aujourd'hui » (pré-activé si la veille avait du flux) → échelle de flux 1–10 (même composant que l'anxiété) avec libellé, douleur Absente / Présente (`Segmented`), note 140 caractères max avec compteur.
-   - Erreurs affichées sous les champs : flux manquant si règles activées, note trop longue ; bouton bloqué tant que c'est invalide.
-   - Loader + blocage du bouton pendant l'envoi ; erreur réseau → toast 3 s, état précédent conservé.
-6. **Calendrier** : catégorie de filtre « Cycle » (couleur dédiée dans `theme.ts`), pastille les jours de règles, jours prédits en teinte légère, détail du jour (flux, douleur, note).
-7. **Accueil** : carte « Prochaines règles » (« dans X jours · vers le JJ/MM », « en cours — jour N » ou « en retard de X jours », mention « Estimation » si besoin).
-8. **Export Excel** : colonnes « Règles (flux /10) », « Douleur règles », « Note règles ».
-9. **Paramètres** : interrupteur d'activation (préférence locale).
-10. **Vérifications** : `npx expo lint`, `npx tsc --noEmit`, contrôle visuel des écrans, commit.
+#### Affichage
+- **Accueil** : carte « Prochaines règles ». Elle affiche « vers le JJ/MM (entre le JJ/MM et le JJ/MM) · dans X jours », « En cours — jour N » ou « En retard de X jours », plus « Estimation » si besoin.
+- **Calendrier** : filtre « Cycle » (couleur dédiée dans `theme.ts`), une pastille les jours de règles, et une teinte légère sur les jours de la fenêtre prévue. Le détail d'un jour affiche le flux, la douleur, la note et l'heure de fin.
+- **Export Excel** : colonnes « Règles (flux /10) », « Douleur règles », « Note règles », « Fin des règles (heure) ».
+
+#### Étapes d'implémentation
+1. **Schéma** : colonnes ajoutées dans `supabase_setup.sql`, et un script de migration `alter table` à exécuter manuellement dans Supabase.
+2. **Types** : ajouter à `DailyLog` les champs `menstrualFlow`, `menstrualPain`, `menstrualNote`, `menstrualEndedAt` (optionnels pour rester compatibles avec le cache existant). Ajouter les types `Period` et `CyclePrediction`.
+3. **Persistance** (`storageService.ts`) : `saveDailyLog` et `syncFromCloud` gèrent les 4 colonnes (cloud d'abord, aucune file locale).
+4. **Logique** : `src/lib/cycle.ts` contient `getPeriods`, `predictNextPeriod` et `shouldShowCycleCard(date)`, et s'appuie sur `src/lib/dates.ts`.
+5. **Journal du jour** (`DailyEntryForm.tsx`) : la carte, sa visibilité, la pré-coche et la validation.
+6. **Calendrier** : le filtre, les pastilles, la fenêtre prévue et le détail du jour.
+7. **Accueil** : la carte « Prochaines règles ».
+8. **Export Excel** : les 4 colonnes.
+9. **Vérifications** : `npx expo lint`, `npx tsc --noEmit`, contrôle visuel des écrans, commit.
 
 #### Tests manuels (connexion internet requise)
-Pré-requis : migration SQL exécutée dans Supabase.
-- **T1 — Saisie d'un jour de règles**
-  1. Ouvrir le Journal du jour.
-  2. Activer « Règles aujourd'hui » : flux 6, douleur Présente, note « crampes le matin ».
+Pré-requis : le script de migration SQL a été exécuté dans Supabase.
+- **T1 — Début des règles**
+  1. Ouvrir le Journal sur une date de la fenêtre prévue.
+  2. Cocher « Règles aujourd'hui », flux 6, douleur Présente, note « crampes le matin ».
   3. Enregistrer.
-  - *Attendu* : loader, bouton bloqué pendant l'envoi ; valeurs présentes après redémarrage.
+  - *Attendu* : loader et bouton bloqué pendant l'envoi ; valeurs présentes après redémarrage de l'app.
   - *Erreur à provoquer* : mode avion avant d'enregistrer → toast d'erreur 3 s, rien n'est enregistré.
-- **T2 — Validation**
-  1. Activer les règles sans choisir de flux.
-  2. Saisir une note de plus de 140 caractères.
-  - *Attendu* : messages sous les champs, bouton désactivé, aucune requête envoyée.
-- **T3 — Prédiction**
-  1. Saisir 3 périodes espacées d'environ un mois.
+- **T2 — Jour suivant**
+  1. Ouvrir le Journal le lendemain.
+  - *Attendu* : la carte est affichée et « Règles aujourd'hui » est pré-cochée.
+- **T3 — Fin dans la journée**
+  1. Cocher « Règles aujourd'hui » et « Plus de règles ».
+  2. Choisir flux 2 et l'heure 14:30.
+  3. Enregistrer.
+  - *Attendu* : enregistrement réussi ; le lendemain, la carte n'est plus affichée.
+  - *Erreur à provoquer* : réseau coupé pendant l'envoi → toast d'erreur, les règles restent « en cours ».
+- **T4 — Validation**
+  1. Cocher « Règles aujourd'hui » sans flux.
+  2. Cocher « Plus de règles » sans heure, ou avec une heure future.
+  3. Saisir une note de plus de 140 caractères.
+  - *Attendu* : un message sous chaque champ, bouton désactivé, aucune requête envoyée.
+- **T5 — Visibilité et prédiction**
+  1. Après une fin de règles, ouvrir le Journal sur une date hors fenêtre.
   2. Ouvrir l'accueil.
-  - *Attendu* : date prédite ≈ dernier début + cycle moyen, sans « Estimation » ; avec une seule période : « Estimation » sur 28 j.
-  - *Erreur à provoquer* : dépasser la date prédite sans saisie → « En retard de X jours ».
-- **T4 — Synchronisation**
-  1. Saisir un jour de règles sur un appareil.
+  - *Attendu* : pas de carte cycle dans le Journal ; l'accueil affiche une date ≈ début + 30 j (« Estimation » tant qu'il n'y a pas 2 cycles).
+  - *Erreur à provoquer* : laisser passer la fenêtre sans déclaration → la carte reste proposée chaque jour et l'accueil affiche « En retard de X jours ».
+- **T6 — Synchronisation**
+  1. Saisir des règles sur un appareil.
   2. Se reconnecter sur un autre appareil.
-  - *Attendu* : mêmes données et même prédiction.
+  - *Attendu* : mêmes données, même prédiction, même visibilité de la carte.
   - *Erreur à provoquer* : couper le réseau pendant la connexion → toast d'erreur ; le cache reste lisible, les écritures sont refusées.
-- **T5 — Retrait d'un jour de règles**
-  1. Désactiver l'interrupteur sur un jour enregistré.
-  2. Enregistrer.
-  - *Attendu* : données effacées, pastille retirée, prédiction recalculée.
-  - *Erreur à provoquer* : réseau coupé → toast d'erreur, le jour reste marqué.
-- **T6 — Export**
+- **T7 — Export**
   1. Exporter une période contenant des règles.
-  - *Attendu* : les 3 colonnes remplies aux bonnes dates.
+  - *Attendu* : les 4 colonnes sont remplies aux bonnes dates.
 
 #### Questions ouvertes
-1. Choix A1 ou A2 ? 2. Choix B1 ou B2 ? 3. Choix C1 ou C2 ? 4. Choix D1 ou D2 ?
-5. Échelle **1–10** (null = pas de règles) ou **0–10** (0 = spotting) ?
-6. Notification locale quelques jours avant les règles prévues ? (hors périmètre, nécessiterait `expo-notifications`)
+1. **Règles en avance / premier enregistrement** : la carte n'apparaît que dans la fenêtre prévue. Comment déclarer des règles arrivées plus tôt (ex. au 26ᵉ jour), ou les toutes premières règles, quand il n'existe encore aucun historique ? Proposition : un lien discret « Mes règles ont commencé » en bas du Journal, toujours présent, qui affiche la carte.
+2. **Fenêtre** : proposer la saisie du 29ᵉ au 31ᵉ jour, puis chaque jour en cas de retard. Ça te convient ?
 
 ---
 
