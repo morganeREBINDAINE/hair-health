@@ -35,8 +35,38 @@ export interface DailyLog {
   fatigueLevel: FatigueLevel | null;
   notes?: string;
   medications: DailyMedicationItem[];
+  // Suivi menstruel (optionnels : absents des journaux mis en cache avant la fonctionnalité)
+  menstrualFlow?: number | null; // 1 à 10, null = pas de règles ce jour-là
+  menstrualPain?: boolean | null;
+  menstrualNote?: string;
+  menstrualEndedAt?: string | null; // « HH:MM » — fin des règles déclarée ce jour-là
   updatedAt?: string;
 }
+
+/** Période de règles reconstituée à partir des journaux quotidiens. */
+export interface Period {
+  start: string; // YYYY-MM-DD
+  /** Dernier jour avec flux déclaré. */
+  lastFlowDay: string;
+  /** Jour où « Plus de règles » a été coché, null si la fin n'est pas déclarée. */
+  end: string | null;
+}
+
+export interface CyclePrediction {
+  nextStart: string;
+  windowStart: string;
+  windowEnd: string;
+  avgCycleLength: number;
+  /** Vrai tant qu'il y a moins de 2 cycles complets pour calculer la moyenne. */
+  isEstimate: boolean;
+}
+
+export type CycleStatus =
+  | { kind: 'none' }
+  | { kind: 'ongoing'; period: Period; day: number }
+  | { kind: 'upcoming'; prediction: CyclePrediction; daysUntil: number }
+  | { kind: 'window'; prediction: CyclePrediction }
+  | { kind: 'late'; prediction: CyclePrediction; daysLate: number };
 
 export interface LabMarkerDefinition {
   id: string;

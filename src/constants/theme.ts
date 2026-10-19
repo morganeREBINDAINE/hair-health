@@ -47,6 +47,10 @@ export const Palette = {
   amber: '#F39A38',
   amberSoft: '#FFF1DC',
 
+  // Cycle menstruel
+  raspberry: '#B83568',
+  raspberrySoft: '#FBE3EC',
+
   error: '#BA1A1A',
 } as const;
 
@@ -59,6 +63,7 @@ export const CategoryColors = {
   meds: Palette.primary,
   haircut: '#5B5F5B',
   sleep: '#5C6BC0',
+  cycle: Palette.raspberry,
 } as const;
 
 // Compatibilité avec use-theme.ts

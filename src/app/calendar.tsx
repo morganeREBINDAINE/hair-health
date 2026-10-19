@@ -17,18 +17,21 @@ import {
   CircleCheck,
   Frown,
   Hash,
+  Droplet,
   type LucideIcon,
 } from 'lucide-react-native';
 import { Palette, Spacing, DockClearance, Radius, CategoryColors, Type, Elevation } from '../constants/theme';
 import { StorageService } from '../services/storageService';
 import { DailyLog, LabTest } from '../types';
 import { AppText, Badge, Card, Chip, IconCircle, PillButton, ScreenHeader } from '../components/ui';
-import { todayIso, shiftIso, dayShort, dayNum, monthTitle, longDay } from '../lib/dates';
+import { todayIso, shiftIso, dayShort, dayNum, monthTitle, longDay, frDate } from '../lib/dates';
+import { flowLabel, getPeriods, hasMenstrualData, predictNextPeriod } from '../lib/cycle';
 import '../lib/calendarLocale';
 
-type Category = 'all' | 'meds' | 'care' | 'henna' | 'blood' | 'emotion' | 'sleep';
+type Category = 'all' | 'cycle' | 'meds' | 'care' | 'henna' | 'blood' | 'emotion' | 'sleep';
 
 const COLOR_LEGEND = [
+  { label: 'Règles', color: CategoryColors.cycle },
   { label: 'Traitements', color: CategoryColors.meds },
   { label: 'Soins', color: CategoryColors.wash },
   { label: 'Henné', color: CategoryColors.henna },
@@ -39,6 +42,7 @@ const COLOR_LEGEND = [
 
 const CATEGORIES: { id: Category; label: string; icon?: LucideIcon }[] = [
   { id: 'all', label: 'Tout' },
+  { id: 'cycle', label: 'Cycle', icon: Droplet },
   { id: 'meds', label: 'Traitements', icon: Pill },
   { id: 'care', label: 'Soins', icon: Scissors },
   { id: 'henna', label: 'Henné', icon: Leaf },
@@ -50,6 +54,7 @@ const CATEGORIES: { id: Category; label: string; icon?: LucideIcon }[] = [
 /** Catégories présentes pour une journée — sert aux pastilles et aux cartes. */
 function dayCategories(log: DailyLog | undefined, hasBlood: boolean) {
   const cats: { key: Exclude<Category, 'all'>; color: string }[] = [];
+  if (hasMenstrualData(log)) cats.push({ key: 'cycle', color: CategoryColors.cycle });
   if (hasBlood) cats.push({ key: 'blood', color: CategoryColors.blood });
   if (log?.medications?.some((m) => m.taken)) cats.push({ key: 'meds', color: CategoryColors.meds });
   if (log && (log.hairWashDone || log.haircutDone || log.hairLossAmount != null))
@@ -100,7 +105,15 @@ export default function CalendarScreen() {
   const goToEntry = () => router.push({ pathname: '/entry', params: { date: selectedDate } });
 
   const takenMeds = selectedLog?.medications.filter((m) => m.taken) ?? [];
-  const anyVisible = (['meds', 'care', 'henna', 'blood', 'emotion', 'sleep'] as const).some(visible);
+
+  // Fenêtre des prochaines règles prévues (jours sans saisie de règles uniquement)
+  const prediction = predictNextPeriod(getPeriods(logs));
+  const isPredicted = (iso: string) =>
+    !!prediction && iso >= prediction.windowStart && iso <= prediction.windowEnd && !hasMenstrualData(logs[iso]);
+  const showPredicted = (category === 'all' || category === 'cycle') && isPredicted(selectedDate);
+
+  const anyVisible =
+    showPredicted || (['cycle', 'meds', 'care', 'henna', 'blood', 'emotion', 'sleep'] as const).some(visible);
 
   return (
     <View style={styles.screen}>
@@ -143,7 +156,12 @@ export default function CalendarScreen() {
                         setSelectedDate(iso);
                         setShowMonth(false);
                       }}
-                      style={[styles.monthDay, isSelected && styles.monthDaySelected, isToday && !isSelected && styles.monthDayToday]}>
+                      style={[
+                        styles.monthDay,
+                        !isSelected && (category === 'all' || category === 'cycle') && isPredicted(iso) && styles.monthDayPredicted,
+                        isSelected && styles.monthDaySelected,
+                        isToday && !isSelected && styles.monthDayToday,
+                      ]}>
                       <AppText
                         variant="labelMd"
                         color={state === 'disabled' ? Palette.outlineVariant : Palette.text}>
@@ -242,6 +260,36 @@ export default function CalendarScreen() {
                   : 'Rien dans cette catégorie ce jour-là.'}
               </AppText>
             </Card>
+          )}
+
+          {visible('cycle') && selectedLog && (
+            <SmallEventCard
+              icon={Droplet}
+              color={CategoryColors.cycle}
+              title={selectedLog.menstrualFlow != null ? 'Règles' : 'Fin des règles'}
+              subtitle={[
+                selectedLog.menstrualFlow != null &&
+                  `Flux ${selectedLog.menstrualFlow}/10 (${flowLabel(selectedLog.menstrualFlow).toLowerCase()})`,
+                selectedLog.menstrualFlow != null && `douleur ${selectedLog.menstrualPain ? 'présente' : 'absente'}`,
+                selectedLog.menstrualEndedAt && `arrêtées à ${selectedLog.menstrualEndedAt}`,
+                selectedLog.menstrualNote,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+              badge={selectedLog.menstrualFlow != null ? `${selectedLog.menstrualFlow}/10` : 'Fin'}
+            />
+          )}
+
+          {showPredicted && prediction && (
+            <SmallEventCard
+              icon={Droplet}
+              color={CategoryColors.cycle}
+              title="Règles prévues"
+              subtitle={`Entre le ${frDate(prediction.windowStart)} et le ${frDate(prediction.windowEnd)}${
+                prediction.isEstimate ? ' · estimation' : ''
+              }`}
+              badge="Prévu"
+            />
           )}
 
           {visible('meds') && (
@@ -497,6 +545,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   monthDaySelected: { backgroundColor: Palette.lime },
+  monthDayPredicted: { backgroundColor: Palette.raspberrySoft },
   monthDayToday: { borderWidth: 1.5, borderColor: Palette.obsidian },
   chipsScroll: { marginHorizontal: -Spacing.margin },
   chips: { gap: 8, paddingHorizontal: Spacing.margin, paddingVertical: 6 },

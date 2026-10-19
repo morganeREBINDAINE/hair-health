@@ -289,6 +289,10 @@ export const StorageService = {
       sleep_hours: log.sleepHours ?? null,
       fatigue_level: log.fatigueLevel ?? null,
       notes: log.notes || '',
+      menstrual_flow: log.menstrualFlow ?? null,
+      menstrual_pain: log.menstrualPain ?? null,
+      menstrual_note: log.menstrualNote ?? '',
+      menstrual_ended_at: log.menstrualEndedAt ?? null,
       updated_at: now,
     }, { onConflict: 'user_id,date' });
 
@@ -565,6 +569,11 @@ export const StorageService = {
           sleepHours: row.sleep_hours ?? null,
           fatigueLevel: (row.fatigue_level as FatigueLevel) ?? null,
           notes: row.notes ?? '',
+          menstrualFlow: row.menstrual_flow ?? null,
+          menstrualPain: row.menstrual_pain ?? null,
+          menstrualNote: row.menstrual_note ?? '',
+          // Postgres renvoie « HH:MM:SS »
+          menstrualEndedAt: row.menstrual_ended_at ? String(row.menstrual_ended_at).slice(0, 5) : null,
           medications,
           updatedAt: row.updated_at,
         };

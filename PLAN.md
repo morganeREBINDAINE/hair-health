@@ -211,7 +211,7 @@ erDiagram
 
 ### Phase 8 : Suivi Menstruel & Prédiction des Prochaines Règles (🩸 Goutte)
 
-> Statut : **choix validés le 19/10/2026**. Deux points restent à confirmer (voir « Questions ouvertes »).
+> Statut : **implémentée le 19/10/2026**. Tests manuels (section ci-dessous) à réaliser après la migration SQL.
 
 **Objectif** : chaque jour de règles, noter le **flux sur 10**, une **petite note** et la **douleur (présente / absente)**. Déclarer explicitement le **début** et la **fin** des règles (avec l'heure de fin). Prédire la date des prochaines règles et ne proposer la saisie qu'au bon moment.
 
@@ -244,12 +244,14 @@ alter table public.daily_logs
 #### Carte « Cycle menstruel » dans le Journal du jour
 - Deux cases : **« Règles aujourd'hui »** et **« Plus de règles »**.
 - « Règles aujourd'hui » cochée → échelle de flux 1–10 (même composant que l'anxiété, avec un libellé : Très léger → Très abondant), douleur Absente / Présente (`Segmented`), note avec compteur `x/140`.
-- « Plus de règles » cochée → sélecteur d'heure (`@react-native-community/datetimepicker`, déjà installé).
-- « Règles aujourd'hui » est **pré-cochée** si la veille avait un flux déclaré et aucune fin. On peut la décocher.
+- « Plus de règles » cochée → champ heure au format `HH:MM` (accepte aussi `9:05` et `14h30`). Un champ texte a été préféré au sélecteur natif pour fonctionner aussi en version web.
+- « Règles aujourd'hui » est **pré-cochée** tant que des règles sont en cours (flux déclaré, aucune fin). On peut la décocher.
+- Hors période, un bouton discret **« Mes règles ont commencé »** en bas du Journal affiche la carte (règles en avance, premières règles).
 - **Erreurs affichées sous les champs** (bouton d'enregistrement bloqué tant qu'il y en a) :
   - « Règles aujourd'hui » sans flux → « Indique l'intensité du flux (1 à 10). »
   - « Plus de règles » sans heure → « Indique l'heure de fin des règles. »
   - Heure de fin dans le futur (journée d'aujourd'hui) → « L'heure de fin ne peut pas être dans le futur. »
+  - Heure mal formée → « Heure invalide, format attendu : 14:30. »
   - Note > 140 caractères → « La note ne doit pas dépasser 140 caractères. »
 - Enregistrement : loader et bouton bloqué pendant l'envoi ; erreur réseau → toast 3 s et l'état précédent est conservé (`docs/STORAGE.md`).
 
@@ -263,9 +265,9 @@ La carte est affichée **uniquement** si l'une de ces conditions est vraie :
 Après la déclaration de fin, la carte disparaît jusqu'à la prochaine fenêtre estimée.
 
 #### Règles de calcul (`src/lib/cycle.ts`, fonctions pures)
-1. **Période** : commence au premier jour avec flux qui suit une fin déclarée (ou le tout premier jour avec flux). Elle se termine au jour où « Plus de règles » est coché. Les jours non saisis entre le début et la fin font partie de la période.
+1. **Période** : commence au premier jour avec flux qui suit une fin déclarée (ou le tout premier jour avec flux). Elle se termine au jour où « Plus de règles » est coché. Les jours non saisis entre le début et la fin font partie de la période. Si la fin a été oubliée, la période est considérée terminée 10 jours après le dernier flux.
 2. **Longueur d'un cycle** : écart entre deux débuts de période. Les valeurs < 15 j ou > 60 j sont ignorées (souvent un mois non saisi).
-3. **Durée de cycle prédite** : moyenne des **6 derniers cycles** valides, arrondie. Sans cycle complet → **30 jours** + mention « Estimation ».
+3. **Durée de cycle prédite** : moyenne des **6 derniers cycles** valides, arrondie. Sans cycle complet → **30 jours**. Mention « Estimation » tant qu'il y a moins de 2 cycles complets.
 4. **Prochain début prédit** : début de la dernière période + durée prédite.
 5. **Fenêtre** : prédiction ± écart-type des cycles, limité entre 1 et 3 jours. Par défaut ± 1 jour, ce qui couvre ton cycle de 29 à 31 jours.
 6. **Retard** : fenêtre dépassée sans début déclaré → « En retard de X jours ».
@@ -273,10 +275,10 @@ Après la déclaration de fin, la carte disparaît jusqu'à la prochaine fenêtr
 #### Affichage
 - **Accueil** : carte « Prochaines règles ». Elle affiche « vers le JJ/MM (entre le JJ/MM et le JJ/MM) · dans X jours », « En cours — jour N » ou « En retard de X jours », plus « Estimation » si besoin.
 - **Calendrier** : filtre « Cycle » (couleur dédiée dans `theme.ts`), une pastille les jours de règles, et une teinte légère sur les jours de la fenêtre prévue. Le détail d'un jour affiche le flux, la douleur, la note et l'heure de fin.
-- **Export Excel** : colonnes « Règles (flux /10) », « Douleur règles », « Note règles », « Fin des règles (heure) ».
+- **Export Excel** : colonnes « Règles (flux /10) », « Douleur règles », « Note règles », « Fin des règles (heure) », avec une case « Cycle menstruel » dans les écrans d'export (Export et Paramètres).
 
 #### Étapes d'implémentation
-1. **Schéma** : colonnes ajoutées dans `supabase_setup.sql`, et un script de migration `alter table` à exécuter manuellement dans Supabase.
+1. **Schéma** : colonnes ajoutées dans `supabase_setup.sql`, et un script de migration `supabase/migrations/20261019_menstrual_tracking.sql` à exécuter manuellement dans Supabase.
 2. **Types** : ajouter à `DailyLog` les champs `menstrualFlow`, `menstrualPain`, `menstrualNote`, `menstrualEndedAt` (optionnels pour rester compatibles avec le cache existant). Ajouter les types `Period` et `CyclePrediction`.
 3. **Persistance** (`storageService.ts`) : `saveDailyLog` et `syncFromCloud` gèrent les 4 colonnes (cloud d'abord, aucune file locale).
 4. **Logique** : `src/lib/cycle.ts` contient `getPeriods`, `predictNextPeriod` et `shouldShowCycleCard(date)`, et s'appuie sur `src/lib/dates.ts`.
@@ -319,12 +321,16 @@ Pré-requis : le script de migration SQL a été exécuté dans Supabase.
   - *Attendu* : mêmes données, même prédiction, même visibilité de la carte.
   - *Erreur à provoquer* : couper le réseau pendant la connexion → toast d'erreur ; le cache reste lisible, les écritures sont refusées.
 - **T7 — Export**
-  1. Exporter une période contenant des règles.
+  1. Exporter une période contenant des règles, case « Cycle menstruel » cochée.
   - *Attendu* : les 4 colonnes sont remplies aux bonnes dates.
+- **T8 — Règles en avance / premières règles**
+  1. Ouvrir le Journal sur une date hors fenêtre (ou sans aucun historique).
+  2. Appuyer sur « Mes règles ont commencé ».
+  - *Attendu* : la carte apparaît avec « Règles aujourd'hui » cochée et le message « Indique l'intensité du flux (1 à 10). » ; après saisie et enregistrement, l'accueil affiche « Règles en cours — Jour 1 ».
 
-#### Questions ouvertes
-1. **Règles en avance / premier enregistrement** : la carte n'apparaît que dans la fenêtre prévue. Comment déclarer des règles arrivées plus tôt (ex. au 26ᵉ jour), ou les toutes premières règles, quand il n'existe encore aucun historique ? Proposition : un lien discret « Mes règles ont commencé » en bas du Journal, toujours présent, qui affiche la carte.
-2. **Fenêtre** : proposer la saisie du 29ᵉ au 31ᵉ jour, puis chaque jour en cas de retard. Ça te convient ?
+#### Décisions finales
+1. **Règles en avance / premières règles** : bouton « Mes règles ont commencé » en bas du Journal (validé).
+2. **Fenêtre** : saisie proposée du 29ᵉ au 31ᵉ jour, puis chaque jour en cas de retard (validé).
 
 ---
 

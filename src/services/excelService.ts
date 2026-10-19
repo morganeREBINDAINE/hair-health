@@ -10,6 +10,7 @@ export interface ExportFilterOptions {
   includeSymptoms: boolean;
   includeHairCare: boolean;
   includeMedications: boolean;
+  includeCycle: boolean;
   includeLabTests: boolean;
   includeLabNorms: boolean;
 }
@@ -61,6 +62,13 @@ export const ExcelService = {
             .map((m) => `${m.name}${m.dosage ? ` (${m.dosage})` : ''}`)
             .join(', ');
           row['Compléments pris'] = takenMeds || 'Aucun';
+        }
+
+        if (options.includeCycle) {
+          row['Règles (flux /10)'] = log.menstrualFlow ?? '-';
+          row['Douleur règles'] = log.menstrualFlow != null ? (log.menstrualPain ? 'Présente' : 'Absente') : '-';
+          row['Note règles'] = log.menstrualNote || '-';
+          row['Fin des règles (heure)'] = log.menstrualEndedAt ?? '-';
         }
 
         dailyRows.push(row);

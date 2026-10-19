@@ -11,6 +11,7 @@ import {
   FlaskConical,
   SlidersHorizontal,
   User,
+  Droplet,
 } from 'lucide-react-native';
 import { ExcelService, ExportFilterOptions } from '../services/excelService';
 import { supabase } from '../lib/supabase';
@@ -36,6 +37,7 @@ export default function ExportScreen() {
   const [includeSymptoms, setIncludeSymptoms] = useState(true);
   const [includeHairCare, setIncludeHairCare] = useState(true);
   const [includeMedications, setIncludeMedications] = useState(true);
+  const [includeCycle, setIncludeCycle] = useState(true);
   const [includeLabTests, setIncludeLabTests] = useState(true);
   const [includeLabNorms, setIncludeLabNorms] = useState(true);
 
@@ -86,6 +88,7 @@ export default function ExportScreen() {
         includeSymptoms,
         includeHairCare,
         includeMedications,
+        includeCycle,
         includeLabTests,
         includeLabNorms,
       };
@@ -149,6 +152,7 @@ export default function ExportScreen() {
             <ToggleRow icon={Activity} title="Anxiété, boule gorge & disputes" value={includeSymptoms} onValueChange={setIncludeSymptoms} />
             <ToggleRow icon={Sparkles} title="Cheveux, lavages & coupes" value={includeHairCare} onValueChange={setIncludeHairCare} />
             <ToggleRow icon={Pill} title="Compléments pris & dosages" value={includeMedications} onValueChange={setIncludeMedications} />
+            <ToggleRow icon={Droplet} title="Cycle menstruel" value={includeCycle} onValueChange={setIncludeCycle} />
             <ToggleRow icon={FlaskConical} title="Bilans de prises de sang" value={includeLabTests} onValueChange={setIncludeLabTests} />
             <ToggleRow icon={SlidersHorizontal} title="Normes fonctionnelles" value={includeLabNorms} onValueChange={setIncludeLabNorms} />
           </View>

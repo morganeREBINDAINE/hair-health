@@ -60,6 +60,10 @@ create table if not exists public.daily_logs (
   sleep_hours numeric default null,
   fatigue_level text check (fatigue_level in ('normal', 'légère', 'modérée', 'importante', null)),
   notes text default '',
+  menstrual_flow int check (menstrual_flow between 1 and 10), -- null = pas de règles ce jour-là
+  menstrual_pain boolean,
+  menstrual_note text default '',
+  menstrual_ended_at time, -- heure de fin des règles (« Plus de règles »)
   created_at timestamp with time zone default timezone('utc'::text, now()),
   updated_at timestamp with time zone default timezone('utc'::text, now()),
   unique(user_id, date)

@@ -21,6 +21,7 @@ import {
   CalendarDays,
   X,
   Syringe,
+  Droplet,
 } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 import { MedicationDefinition, TreatmentPlan, TreatmentType, LabMarkerDefinition } from '../types';
@@ -75,6 +76,7 @@ export default function SettingsScreen() {
   const [includeSymptoms, setIncludeSymptoms] = useState(true);
   const [includeHairCare, setIncludeHairCare] = useState(true);
   const [includeMedications, setIncludeMedications] = useState(true);
+  const [includeCycle, setIncludeCycle] = useState(true);
   const [includeLabTests, setIncludeLabTests] = useState(true);
   const [includeLabNorms, setIncludeLabNorms] = useState(true);
 
@@ -255,7 +257,7 @@ export default function SettingsScreen() {
       if (datePreset === '7d') { const d = new Date(); d.setDate(now.getDate() - 7); startDate = d.toISOString().slice(0, 10); }
       else if (datePreset === '30d') { const d = new Date(); d.setDate(now.getDate() - 30); startDate = d.toISOString().slice(0, 10); }
       else if (datePreset === '90d') { const d = new Date(); d.setDate(now.getDate() - 90); startDate = d.toISOString().slice(0, 10); }
-      const options: ExportFilterOptions = { startDate, endDate: now.toISOString().slice(0, 10), includeSymptoms, includeHairCare, includeMedications, includeLabTests, includeLabNorms };
+      const options: ExportFilterOptions = { startDate, endDate: now.toISOString().slice(0, 10), includeSymptoms, includeHairCare, includeMedications, includeCycle, includeLabTests, includeLabNorms };
       const result = await ExcelService.generateAndShareExport(options);
       if (!result.success) Alert.alert('Erreur', result.message || "Erreur d'export.");
     } catch (e: any) {
@@ -375,6 +377,7 @@ export default function SettingsScreen() {
             <ToggleRow icon={Activity} title="Anxiété, boule gorge & disputes" value={includeSymptoms} onValueChange={setIncludeSymptoms} />
             <ToggleRow icon={Sparkles} title="Cheveux, lavages & coupes" value={includeHairCare} onValueChange={setIncludeHairCare} />
             <ToggleRow icon={Pill} title="Compléments pris & dosages" value={includeMedications} onValueChange={setIncludeMedications} />
+            <ToggleRow icon={Droplet} title="Cycle menstruel" value={includeCycle} onValueChange={setIncludeCycle} />
             <ToggleRow icon={FlaskConical} title="Bilans de prises de sang" value={includeLabTests} onValueChange={setIncludeLabTests} />
             <ToggleRow icon={SlidersHorizontal} title="Normes fonctionnelles" value={includeLabNorms} onValueChange={setIncludeLabNorms} />
           </View>

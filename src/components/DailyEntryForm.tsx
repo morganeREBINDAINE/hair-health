@@ -14,9 +14,11 @@ import {
   Scissors,
   Moon,
   Droplets,
+  Droplet,
+  Clock,
   CircleCheck,
 } from 'lucide-react-native';
-import { DailyLog, DailyMedicationItem, FatigueLevel, MedicationDefinition, ShampooType, TreatmentPlan } from '../types';
+import { CycleStatus, DailyLog, DailyMedicationItem, FatigueLevel, MedicationDefinition, ShampooType, TreatmentPlan } from '../types';
 import { StorageService } from '../services/storageService';
 import { Palette, Spacing, DockClearance, Radius, Type } from '../constants/theme';
 import {
@@ -32,7 +34,15 @@ import {
   inputStyle,
   type BadgeTone,
 } from './ui';
-import { frDate } from '../lib/dates';
+import { frDate, todayIso } from '../lib/dates';
+import {
+  NOTE_MAX_LENGTH,
+  flowLabel,
+  getCycleStatus,
+  hasMenstrualData,
+  normalizeTime,
+  shouldShowCycleCard,
+} from '../lib/cycle';
 
 interface DailyEntryFormProps {
   selectedDate: string;
@@ -57,6 +67,25 @@ const FATIGUE_OPTIONS: { id: FatigueLevel; label: string }[] = [
 
 
 const SLEEP_QUICK: number[] = [5, 6, 7, 8, 9];
+
+const currentTime = () => {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+};
+
+function cycleSubtitle(status: CycleStatus | null): string {
+  if (!status) return '';
+  switch (status.kind) {
+    case 'ongoing':
+      return `Jour ${status.day} des règles`;
+    case 'window':
+      return `Règles attendues vers le ${frDate(status.prediction.nextStart)}`;
+    case 'late':
+      return `Retard de ${status.daysLate} jour${status.daysLate > 1 ? 's' : ''}`;
+    default:
+      return 'Déclaration du début des règles';
+  }
+}
 
 function anxietyBadge(score: number | null): { label: string; tone: BadgeTone } {
   if (score === null) return { label: 'Non renseigné', tone: 'neutral' };
@@ -91,6 +120,16 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
   const [newMedDosage, setNewMedDosage] = useState('');
   const [showAddMed, setShowAddMed] = useState(false);
 
+  // Suivi menstruel
+  const [cycleCardVisible, setCycleCardVisible] = useState(false);
+  const [cycleStatus, setCycleStatus] = useState<CycleStatus | null>(null);
+  const [periodToday, setPeriodToday] = useState(false);
+  const [flow, setFlow] = useState<number | null>(null);
+  const [pain, setPain] = useState(false);
+  const [periodNote, setPeriodNote] = useState('');
+  const [periodEnded, setPeriodEnded] = useState(false);
+  const [endTime, setEndTime] = useState('');
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -123,7 +162,29 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
 
       setMedDefinitions(defs);
 
-      const existingLog = await StorageService.getDailyLog(selectedDate);
+      const allLogs = await StorageService.getAllDailyLogs();
+      const existingLog = allLogs[selectedDate] ?? null;
+
+      const status = getCycleStatus(allLogs, selectedDate);
+      setCycleStatus(status);
+      setCycleCardVisible(shouldShowCycleCard(allLogs, selectedDate));
+      if (existingLog && hasMenstrualData(existingLog)) {
+        setPeriodToday(existingLog.menstrualFlow != null);
+        setFlow(existingLog.menstrualFlow ?? null);
+        setPain(existingLog.menstrualPain ?? false);
+        setPeriodNote(existingLog.menstrualNote ?? '');
+        setPeriodEnded(existingLog.menstrualEndedAt != null);
+        setEndTime(existingLog.menstrualEndedAt ?? '');
+      } else {
+        // Règles en cours sans fin déclarée : « Règles aujourd'hui » pré-cochée
+        setPeriodToday(status.kind === 'ongoing');
+        setFlow(null);
+        setPain(false);
+        setPeriodNote('');
+        setPeriodEnded(false);
+        setEndTime('');
+      }
+
       if (existingLog) {
         setAnxietyScore(existingLog.anxietyScore);
         setLumpInThroat(existingLog.lumpInThroat);
@@ -203,7 +264,29 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
     }
   };
 
+  // Erreurs de saisie du cycle, affichées sous les champs concernés
+  const cycleErrors: { flow?: string; note?: string; time?: string } = {};
+  if (cycleCardVisible) {
+    if (periodToday && flow === null) cycleErrors.flow = "Indique l'intensité du flux (1 à 10).";
+    if (periodToday && periodNote.length > NOTE_MAX_LENGTH)
+      cycleErrors.note = `La note ne doit pas dépasser ${NOTE_MAX_LENGTH} caractères.`;
+    if (periodEnded) {
+      const time = normalizeTime(endTime);
+      if (!endTime.trim()) cycleErrors.time = "Indique l'heure de fin des règles.";
+      else if (!time) cycleErrors.time = 'Heure invalide, format attendu : 14:30.';
+      else if (selectedDate === todayIso() && time > currentTime())
+        cycleErrors.time = "L'heure de fin ne peut pas être dans le futur.";
+    }
+  }
+  const hasCycleErrors = Object.keys(cycleErrors).length > 0;
+
+  const handleDeclarePeriod = () => {
+    setCycleCardVisible(true);
+    setPeriodToday(true);
+  };
+
   const handleSave = async () => {
+    if (hasCycleErrors) return;
     setSaving(true);
     try {
       const parsedHairLoss = hairLossAmount.trim() === '' ? null : parseInt(hairLossAmount, 10);
@@ -223,12 +306,17 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         sleepHours: isNaN(parsedSleep as number) ? null : parsedSleep,
         fatigueLevel,
         medications,
+        menstrualFlow: cycleCardVisible && periodToday ? flow : null,
+        menstrualPain: cycleCardVisible && periodToday ? pain : null,
+        menstrualNote: cycleCardVisible && periodToday ? periodNote.trim() : '',
+        menstrualEndedAt: cycleCardVisible && periodEnded ? normalizeTime(endTime) : null,
       };
 
       await StorageService.saveDailyLog(log);
       Alert.alert('Journée enregistrée ✓', `Journée du ${frDate(selectedDate)} sauvegardée.`);
       if (onSaved) onSaved();
-    } catch {
+    } catch (e) {
+      console.error('Erreur enregistrement journal:', e);
       Toast.error('Connexion requise pour enregistrer');
     } finally {
       setSaving(false);
@@ -248,6 +336,128 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         {header}
 
         <View style={[styles.sections, loading && { opacity: 0.5 }]} pointerEvents={loading ? 'none' : 'auto'}>
+          {/* ── 0. Cycle menstruel (proposé seulement au bon moment) ── */}
+          {cycleCardVisible && (
+            <Card style={styles.section}>
+              <SectionHeader
+                icon={Droplet}
+                iconBg={Palette.raspberrySoft}
+                iconColor={Palette.raspberry}
+                title="Cycle menstruel"
+                subtitle={cycleSubtitle(cycleStatus)}
+              />
+              <ToggleRow
+                icon={Droplet}
+                title="Règles aujourd'hui"
+                subtitle="Flux, douleur et note du jour"
+                value={periodToday}
+                onValueChange={setPeriodToday}
+                activeColor={Palette.raspberry}
+                activeBg={Palette.raspberrySoft}
+              />
+              {periodToday && (
+                <View style={{ gap: 16 }}>
+                  <View style={{ gap: 8 }}>
+                    <View style={styles.rowBetween}>
+                      <AppText variant="labelMd">Flux</AppText>
+                      {flow !== null && <Badge label={`${flow} / 10 · ${flowLabel(flow)}`} tone="neutral" />}
+                    </View>
+                    <View style={styles.rowBetween}>
+                      <AppText variant="bodySm" color={Palette.textMuted}>
+                        1 (Très léger)
+                      </AppText>
+                      <AppText variant="bodySm" color={Palette.textMuted}>
+                        10 (Très abondant)
+                      </AppText>
+                    </View>
+                    <View style={styles.scale}>
+                      {Array.from({ length: 10 }).map((_, i) => {
+                        const value = i + 1;
+                        const selected = flow === value;
+                        return (
+                          <Pressable
+                            key={value}
+                            onPress={() => setFlow(selected ? null : value)}
+                            style={({ pressed }) => [
+                              styles.scaleBtn,
+                              selected && { backgroundColor: Palette.raspberry },
+                              pressed && { transform: [{ scale: 0.9 }] },
+                            ]}>
+                            <AppText variant="labelMd" color={selected ? '#FFFFFF' : Palette.text}>
+                              {value}
+                            </AppText>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {cycleErrors.flow && <FieldError text={cycleErrors.flow} />}
+                  </View>
+
+                  <View style={styles.inlineRow}>
+                    <AppText variant="labelMd">Douleur</AppText>
+                    <Segmented
+                      options={[
+                        { id: 'absente', label: 'Absente' },
+                        { id: 'presente', label: 'Présente' },
+                      ]}
+                      value={pain ? 'presente' : 'absente'}
+                      onChange={(v) => setPain(v === 'presente')}
+                    />
+                  </View>
+
+                  <View style={{ gap: 6 }}>
+                    <TextInput
+                      style={[inputStyle, styles.noteInput]}
+                      value={periodNote}
+                      onChangeText={setPeriodNote}
+                      placeholder="Petite note (ex : crampes le matin)"
+                      placeholderTextColor={Palette.textMuted}
+                      multiline
+                    />
+                    <View style={styles.rowBetween}>
+                      {cycleErrors.note ? <FieldError text={cycleErrors.note} /> : <View />}
+                      <AppText
+                        variant="bodySm"
+                        color={periodNote.length > NOTE_MAX_LENGTH ? Palette.error : Palette.textMuted}>
+                        {periodNote.length} / {NOTE_MAX_LENGTH}
+                      </AppText>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              <ToggleRow
+                icon={Clock}
+                title="Plus de règles"
+                subtitle="Les règles se sont arrêtées aujourd'hui"
+                value={periodEnded}
+                onValueChange={setPeriodEnded}
+                activeColor={Palette.raspberry}
+                activeBg={Palette.raspberrySoft}
+              />
+              {periodEnded && (
+                <View style={{ gap: 6 }}>
+                  <AppText variant="labelMd">Heure de fin</AppText>
+                  <TextInput
+                    style={inputStyle}
+                    value={endTime}
+                    onChangeText={setEndTime}
+                    placeholder="Ex : 14:30"
+                    placeholderTextColor={Palette.textMuted}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={5}
+                  />
+                  {cycleErrors.time && <FieldError text={cycleErrors.time} />}
+                  {periodToday && !cycleErrors.time && (
+                    <AppText variant="bodySm" color={Palette.textMuted}>
+                      Règles le matin, arrêtées à {normalizeTime(endTime)}.
+                    </AppText>
+                  )}
+                </View>
+              )}
+            </Card>
+          )}
+
           {/* ── 1. Anxiété & état mental ── */}
           <Card style={styles.section}>
             <SectionHeader
@@ -507,13 +717,29 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
             </View>
           </Card>
 
+          {!cycleCardVisible && (
+            <PillButton
+              label="Mes règles ont commencé"
+              icon={Droplet}
+              variant="ghost"
+              compact
+              onPress={handleDeclarePeriod}
+            />
+          )}
+
           <View style={{ gap: 10, marginTop: 4 }}>
             <PillButton
               label={saving ? 'Sauvegarde en cours…' : 'Enregistrer la journée'}
               icon={CircleCheck}
               loading={saving}
+              disabled={hasCycleErrors}
               onPress={handleSave}
             />
+            {hasCycleErrors && (
+              <AppText variant="bodySm" color={Palette.error} style={{ textAlign: 'center' }}>
+                Corrige la carte « Cycle menstruel » pour enregistrer.
+              </AppText>
+            )}
             <AppText variant="bodySm" color={Palette.textMuted} style={{ textAlign: 'center' }}>
               Journée du {frDate(selectedDate)}
             </AppText>
@@ -523,6 +749,14 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
     </KeyboardAvoidingView>
   );
 };
+
+function FieldError({ text }: { text: string }) {
+  return (
+    <AppText variant="bodySm" color={Palette.error} style={{ flexShrink: 1 }}>
+      {text}
+    </AppText>
+  );
+}
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Palette.canvas },
@@ -598,4 +832,12 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   inlineLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  noteInput: {
+    height: undefined,
+    minHeight: 72,
+    borderRadius: Radius.lg,
+    paddingTop: 14,
+    paddingBottom: 14,
+    textAlignVertical: 'top',
+  },
 });
