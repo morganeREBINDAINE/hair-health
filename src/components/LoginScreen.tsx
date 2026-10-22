@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
-import { Leaf, LogIn } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { LogIn } from 'lucide-react-native';
 import { signInWithGoogle } from '../lib/supabase';
 import { Palette, Radius, Spacing } from '../constants/theme';
 import { AppText, Card, PillButton } from './ui';
@@ -33,7 +34,7 @@ export default function LoginScreen() {
       <View style={styles.content}>
         <View style={styles.logoArea}>
           <View style={styles.logo}>
-            <Leaf size={34} color={Palette.obsidian} />
+            <Image source={require('../../assets/images/logo.png')} style={{ width: 54, height: 54 }} contentFit="contain" />
           </View>
           <AppText variant="labelSm" color={Palette.textMuted} style={styles.eyebrow}>
             Vitalité Capillaire
@@ -81,7 +82,7 @@ const styles = StyleSheet.create({
     width: 76,
     height: 76,
     borderRadius: 38,
-    backgroundColor: Palette.lime,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,

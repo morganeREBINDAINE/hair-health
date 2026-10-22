@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Animated,
+  Easing,
   View,
   Text,
   Pressable,
@@ -10,7 +12,8 @@ import {
   type TextStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Leaf, UserRound, type LucideIcon } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { UserRound, type LucideIcon } from 'lucide-react-native';
 import { Palette, Radius, Elevation, Type, FontFamily, Spacing } from '../constants/theme';
 
 // ─── Typographie ────────────────────────────────────────────────────────────
@@ -53,7 +56,7 @@ export function ScreenHeader({
     <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
       <View style={styles.headerLeft}>
         <View style={styles.headerLogo}>
-          <Leaf size={20} color={Palette.textVariant} />
+          <Image source={require('../../assets/images/logo.png')} style={{ width: 30, height: 30 }} contentFit="contain" />
         </View>
         <View>
           <AppText variant="labelSm" color={Palette.textMuted} style={styles.eyebrow}>
@@ -95,6 +98,56 @@ export function Card({
     );
   }
   return <View style={base}>{children}</View>;
+}
+
+// ─── Skeleton (chargement) ──────────────────────────────────────────────────
+
+/** Bloc gris pulsant, à la place d'un contenu en cours de chargement. */
+export function Skeleton({
+  width = '100%',
+  height = 16,
+  radius = Radius.md,
+  style,
+}: {
+  width?: number | `${number}%`;
+  height?: number;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const [pulse] = useState(() => new Animated.Value(0.45));
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.45, duration: 700, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  return (
+    <Animated.View
+      accessibilityLabel="Chargement"
+      style={[{ width, height, borderRadius: radius, backgroundColor: Palette.containerHighest, opacity: pulse }, style]}
+    />
+  );
+}
+
+/** Carte squelette : un titre et quelques lignes. */
+export function SkeletonCard({ lines = 2, height, style }: { lines?: number; height?: number; style?: StyleProp<ViewStyle> }) {
+  return (
+    <Card style={[{ gap: 10 }, height ? { height } : null, style]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Skeleton width={40} height={40} radius={20} />
+        <Skeleton width="55%" height={18} />
+      </View>
+      {Array.from({ length: lines }, (_, i) => (
+        <Skeleton key={i} width={i === lines - 1 ? '70%' : '100%'} height={12} />
+      ))}
+    </Card>
+  );
 }
 
 // ─── Icône dans un cercle ───────────────────────────────────────────────────
@@ -401,7 +454,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Palette.containerHighest,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
