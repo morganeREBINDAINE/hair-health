@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { CheckupKind, LabMarkerDefinition, LabTest, MedicalExam, PlannedCheckup } from '../types';
 import { StorageService } from '../services/storageService';
 import { Toast } from '../lib/toast';
@@ -30,11 +30,7 @@ export default function AnalysesScreen() {
   const [planVisible, setPlanVisible] = useState(false);
   const [planKind, setPlanKind] = useState<CheckupKind>('blood');
   const [editingPlan, setEditingPlan] = useState<PlannedCheckup | null>(null);
-
-  // Ouverture directe d'un onglet depuis l'accueil (/analyses?tab=exams)
-  useEffect(() => {
-    if (params.tab && (TABS as string[]).includes(params.tab)) setActiveTab(params.tab as AnalysesTab);
-  }, [params.tab]);
+  const [planSession, setPlanSession] = useState(0);
 
   const loadAll = useCallback(async () => {
     try {
@@ -62,18 +58,25 @@ export default function AnalysesScreen() {
   useFocusEffect(
     useCallback(() => {
       loadAll();
-    }, [loadAll]),
+      // Ouverture directe d'un onglet depuis l'accueil (/analyses?tab=exams), puis on consomme le paramètre
+      if (params.tab && (TABS as string[]).includes(params.tab)) {
+        setActiveTab(params.tab as AnalysesTab);
+        router.setParams({ tab: undefined });
+      }
+    }, [loadAll, params.tab]),
   );
 
   const openPlan = (kind: CheckupKind) => {
     setEditingPlan(null);
     setPlanKind(kind);
+    setPlanSession((n) => n + 1);
     setPlanVisible(true);
   };
 
   const editPlan = (item: PlannedCheckup) => {
     setEditingPlan(item);
     setPlanKind(item.kind);
+    setPlanSession((n) => n + 1);
     setPlanVisible(true);
   };
 
@@ -181,6 +184,7 @@ export default function AnalysesScreen() {
       </ScrollView>
 
       <PlanningSheet
+        key={planSession}
         visible={planVisible}
         onClose={() => setPlanVisible(false)}
         initialKind={planKind}

@@ -18,66 +18,22 @@ import {
   Sparkles,
   Clock,
   Repeat,
+  ScanLine,
 } from 'lucide-react-native';
 import { Palette, Spacing, DockClearance, Type } from '../constants/theme';
 import { StorageService } from '../services/storageService';
-import { CyclePrediction, CycleStatus, DailyLog, LabMarkerDefinition, LabTest, TreatmentPlan } from '../types';
-import { todayIso, shiftIso, shiftMonthsIso, dayShort, daysBetween, frDate } from '../lib/dates';
+import { CyclePrediction, CycleStatus, DailyLog, LabMarkerDefinition, LabTest, PlannedCheckup, TreatmentPlan } from '../types';
+import { todayIso, shiftIso, dayShort, daysBetween, frDate } from '../lib/dates';
 import { getCycleStatus, getPeriods, predictNextPeriod } from '../lib/cycle';
 import { AppText, Badge, Card, IconCircle, ScreenHeader, type BadgeTone } from '../components/ui';
 import { PillBarChart } from '../components/charts';
 import { DataLoading } from '../components/DataLoader';
 import { SyncEvent } from '../lib/syncEvent';
+import { Toast } from '../lib/toast';
+import { computeRecheckReminders, type RecheckReminder } from '../lib/labStatus';
+import { checkupLabel } from '../components/analyses/Planning';
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-
-/**
- * Fréquence de contrôle de chaque marqueur selon la dernière valeur mesurée :
- * `needsCloseWatch(value)` vrai → intervalle court, sinon intervalle long (en mois).
- */
-const BLOOD_CHECKS = [
-  { code: 'tsh', name: 'TSH', unit: 'mUI/L', needsCloseWatch: (v: number) => v > 2.5, shortMonths: 2, longMonths: 6 },
-  { code: 'vit_d', name: 'Vitamine D', unit: 'ng/mL', needsCloseWatch: (v: number) => v < 50, shortMonths: 3, longMonths: 12 },
-  { code: 'ferritine', name: 'Ferritine', unit: 'µg/L', needsCloseWatch: (v: number) => v < 70, shortMonths: 3, longMonths: 6 },
-];
-
-type BloodCheck = {
-  code: string;
-  name: string;
-  last: { date: string; value: number; unit: string } | null;
-  months: number | null;
-  dueDate: string | null;
-  daysLeft: number | null;
-  due: boolean;
-};
-
-function computeBloodChecks(tests: LabTest[], markers: LabMarkerDefinition[], today: string): BloodCheck[] {
-  const sorted = [...tests].sort((a, b) => b.date.localeCompare(a.date));
-  return BLOOD_CHECKS.map((cfg) => {
-    // Un résultat est rattaché au marqueur par son id (« marker-tsh ») ou par son code
-    const marker = markers.find((m) => m.code.toLowerCase() === cfg.code);
-    const keys = new Set([cfg.code, `marker-${cfg.code}`, ...(marker ? [marker.id.toLowerCase()] : [])]);
-    if (cfg.code === 'vit_d') keys.add('marker-vitd');
-    const unit = marker?.unit ?? cfg.unit;
-
-    let last: BloodCheck['last'] = null;
-    for (const t of sorted) {
-      const entry = Object.entries(t.values).find(([k, v]) => keys.has(k.toLowerCase()) && typeof v === 'number');
-      if (entry) {
-        last = { date: t.date, value: entry[1], unit };
-        break;
-      }
-    }
-
-    if (!last) {
-      return { code: cfg.code, name: cfg.name, last, months: null, dueDate: null, daysLeft: null, due: true };
-    }
-    const months = cfg.needsCloseWatch(last.value) ? cfg.shortMonths : cfg.longMonths;
-    const dueDate = shiftMonthsIso(last.date, months);
-    const daysLeft = daysBetween(today, dueDate);
-    return { code: cfg.code, name: cfg.name, last, months, dueDate, daysLeft, due: daysLeft <= 0 };
-  }).sort((a, b) => (a.daysLeft ?? -Infinity) - (b.daysLeft ?? -Infinity));
-}
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -87,22 +43,26 @@ export default function DashboardScreen() {
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const [labMarkers, setLabMarkers] = useState<LabMarkerDefinition[]>([]);
   const [treatmentPlans, setTreatmentPlans] = useState<TreatmentPlan[]>([]);
+  const [checkups, setCheckups] = useState<PlannedCheckup[]>([]);
 
   const loadData = useCallback(async () => {
     try {
       // Tout est lu avant la mise à jour de l'état : le dashboard s'affiche en une seule fois, déjà rempli
-      const [all, tests, markers, plans] = await Promise.all([
+      const [all, tests, markers, plans, planned] = await Promise.all([
         StorageService.getAllDailyLogs(),
         StorageService.getLabTests(),
         StorageService.getLabMarkers(),
         StorageService.getTreatmentPlans(),
+        StorageService.getPlannedCheckups(),
       ]);
       setLogs(Object.values(all).sort((a, b) => a.date.localeCompare(b.date)));
       setLabTests(tests);
       setLabMarkers(markers);
       setTreatmentPlans(plans);
+      setCheckups(planned);
     } catch (e) {
       console.error('Erreur chargement dashboard:', e);
+      Toast.error("Impossible de charger l'accueil");
     } finally {
       setInitialLoading(false);
     }
@@ -176,8 +136,9 @@ export default function DashboardScreen() {
   const cycleStatus = getCycleStatus(logsRecord, todayStr, { includeDate: true });
   const cyclePrediction = predictNextPeriod(getPeriods(logsRecord));
 
-  // ── Prochaines prises de sang ──
-  const bloodChecks = computeBloodChecks(labTests, labMarkers, todayStr);
+  // ── Contrôles à prévoir et rendez-vous planifiés ──
+  const reminders = computeRecheckReminders(labTests, labMarkers, todayStr);
+  const upcoming = checkups.filter((c) => !c.done);
 
   // ── Graphique chute ──
   const hairChartData = logs
@@ -409,20 +370,51 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Prochaines prises de sang */}
-        <View style={{ gap: 8 }}>
-          <View style={[styles.rowBetween, { paddingHorizontal: 4 }]}>
-            <AppText variant="headlineSm">Prochaines prises de sang</AppText>
-            <Pressable onPress={() => router.push('/norms')} hitSlop={8}>
-              <AppText variant="labelSm" color={Palette.primary}>
-                Bilans
-              </AppText>
-            </Pressable>
+        {/* Rendez-vous planifiés */}
+        {upcoming.length > 0 && (
+          <View style={{ gap: 8 }}>
+            <View style={[styles.rowBetween, { paddingHorizontal: 4 }]}>
+              <AppText variant="headlineSm">Rendez-vous planifiés</AppText>
+              <Badge label={String(upcoming.length)} tone="limeSoft" />
+            </View>
+            {upcoming.map((c) => {
+              const days = daysBetween(todayStr, c.date);
+              return (
+                <CareRow
+                  key={c.id}
+                  icon={c.kind === 'blood' ? Droplet : ScanLine}
+                  iconBg={Palette.limeSoft}
+                  iconColor={Palette.primary}
+                  title={checkupLabel(c, labMarkers)}
+                  subtitle={`${c.kind === 'blood' ? 'Prise de sang' : 'Examen'} · ${frDate(c.date)}${c.note ? ` · ${c.note}` : ''}`}
+                  badge={days < 0 ? `En retard ${-days} j` : days === 0 ? "Aujourd'hui" : `Dans ${days} j`}
+                  onPress={() => router.push({ pathname: '/analyses', params: { tab: c.kind === 'blood' ? 'tests' : 'exams' } })}
+                />
+              );
+            })}
           </View>
-          {bloodChecks.map((c) => (
-            <BloodCheckRow key={c.code} check={c} onPress={() => router.push('/norms')} />
-          ))}
-        </View>
+        )}
+
+        {/* Contrôles à prévoir (molécules avec fréquence de suivi) */}
+        {reminders.length > 0 && (
+          <View style={{ gap: 8 }}>
+            <View style={[styles.rowBetween, { paddingHorizontal: 4 }]}>
+              <AppText variant="headlineSm">Prochaines prises de sang</AppText>
+              <Pressable onPress={() => router.push({ pathname: '/analyses', params: { tab: 'tests' } })} hitSlop={8}>
+                <AppText variant="labelSm" color={Palette.primary}>
+                  Bilans
+                </AppText>
+              </Pressable>
+            </View>
+            {reminders.map((r) => (
+              <BloodCheckRow
+                key={r.marker.id}
+                check={r}
+                onPress={() => router.push({ pathname: '/marker/[id]', params: { id: r.marker.id } })}
+              />
+            ))}
+          </View>
+        )}
 
         {/* Graphique chute */}
         <Card style={{ gap: 12 }}>
@@ -485,13 +477,14 @@ function CareRow({
   );
 }
 
-function BloodCheckRow({ check, onPress }: { check: BloodCheck; onPress?: () => void }) {
-  const { due, last, months, dueDate, daysLeft } = check;
+function BloodCheckRow({ check, onPress }: { check: RecheckReminder; onPress?: () => void }) {
+  const { due, last, months, dueDate, daysLeft, marker, status } = check;
+  const outOfRange = status === 'low' || status === 'high';
   const fg = due ? '#FFFFFF' : Palette.text;
   const muted = due ? 'rgba(255,255,255,0.85)' : Palette.textMuted;
 
   const lastLine = last
-    ? `Dernière : ${last.value} ${last.unit} le ${frDate(last.date)}`
+    ? `Dernière : ${last.value} ${marker.unit} le ${frDate(last.date)}${outOfRange ? ' · hors norme' : ''}`
     : 'Aucun résultat enregistré';
   const nextLine =
     dueDate && months !== null
@@ -518,7 +511,7 @@ function BloodCheckRow({ check, onPress }: { check: BloodCheck; onPress?: () => 
       />
       <View style={{ flex: 1, minWidth: 0 }}>
         <AppText variant="labelMd" style={{ fontSize: 15 }} color={fg} numberOfLines={1}>
-          {check.name}
+          {marker.name}
         </AppText>
         <AppText variant="bodySm" color={muted} numberOfLines={1}>
           {lastLine}

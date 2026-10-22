@@ -78,6 +78,8 @@ export interface LabMarkerDefinition {
   description: string;
   displayOrder: number;
   hidden?: boolean;
+  /** Fréquence de contrôle quand la valeur est dans la norme (6 ou 12 mois). Absent = pas de rappel. */
+  recheckMonths?: 6 | 12 | null;
 }
 
 export interface LabTestValue {
@@ -142,3 +144,32 @@ export type CalendarFilterType =
   | 'conflict'
   | 'hairLoss'
   | 'bloodTest';
+
+export type MedicalExamType = 'radio' | 'echographie';
+
+export interface MedicalExam {
+  id: string;
+  type: MedicalExamType;
+  date: string; // YYYY-MM-DD
+  title: string;
+  location: string;
+  result: string;
+  /** Chemin dans le bucket privé « exam-photos ». */
+  photoPath: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type CheckupKind = 'blood' | 'exam';
+
+export interface PlannedCheckup {
+  id: string;
+  kind: CheckupKind;
+  date: string; // YYYY-MM-DD
+  markerCodes: string[];
+  examLabel: string;
+  note: string;
+  done: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}

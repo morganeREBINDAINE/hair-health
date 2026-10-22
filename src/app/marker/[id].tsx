@@ -1,13 +1,17 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, CircleCheck, Droplet, TriangleAlert, ChartLine } from 'lucide-react-native';
+import { ArrowLeft, CircleCheck, Droplet, TriangleAlert, ChartLine, BellRing } from 'lucide-react-native';
 import { LabMarkerDefinition, LabTest } from '../../types';
 import { StorageService } from '../../services/storageService';
 import { Palette, Spacing, DockClearance, Radius } from '../../constants/theme';
 import { AppText, Badge, Card, IconCircle, ScreenHeader, Segmented } from '../../components/ui';
 import { TimeSeriesChart } from '../../components/charts';
 import { frDate, todayIso } from '../../lib/dates';
+import { Toast } from '../../lib/toast';
+import { computeRecheckReminders, OUT_OF_RANGE_RECHECK_MONTHS } from '../../lib/labStatus';
+
+type Frequency = 'none' | '6' | '12';
 
 type Period = '6m' | '1y' | '3y' | '5y';
 
@@ -25,6 +29,7 @@ export default function MarkerDetailScreen() {
   const [period, setPeriod] = useState<Period>('1y');
   const [marker, setMarker] = useState<LabMarkerDefinition | null>(null);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
+  const [savingFrequency, setSavingFrequency] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -35,6 +40,7 @@ export default function MarkerDetailScreen() {
           setLabTests(await StorageService.getLabTests());
         } catch (e) {
           console.error('Erreur chargement analyse:', e);
+          Toast.error("Impossible de charger l'analyse");
         }
       })();
     }, [id])
@@ -51,7 +57,25 @@ export default function MarkerDetailScreen() {
   const inPeriod = history.filter((p) => p.date >= fromIso && p.date <= toIso).reverse();
   const chartWidth = Math.min(width, 640) - Spacing.margin * 2 - 40;
 
-  const goBack = () => router.navigate('/norms');
+  const goBack = () => router.navigate('/analyses');
+
+  const frequency: Frequency = marker?.recheckMonths ? (String(marker.recheckMonths) as Frequency) : 'none';
+  const reminder = marker?.recheckMonths ? computeRecheckReminders(labTests, [marker], todayIso())[0] : null;
+
+  const changeFrequency = async (next: Frequency) => {
+    if (!marker || savingFrequency || next === frequency) return;
+    setSavingFrequency(true);
+    try {
+      const recheckMonths = next === 'none' ? null : (Number(next) as 6 | 12);
+      const markers = await StorageService.saveLabMarker({ ...marker, recheckMonths });
+      setMarker(markers.find((m) => m.id === marker.id) ?? null);
+    } catch (e) {
+      console.error('[marker] fréquence de suivi', e);
+      Toast.error('Connexion requise pour modifier le suivi');
+    } finally {
+      setSavingFrequency(false);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -59,7 +83,7 @@ export default function MarkerDetailScreen() {
         title={marker?.name ?? 'Analyse'}
         eyebrow="Évolution"
         right={
-          <Pressable onPress={goBack} style={styles.backBtn} hitSlop={6} accessibilityLabel="Retour aux normes">
+          <Pressable onPress={goBack} style={styles.backBtn} hitSlop={6} accessibilityLabel="Retour aux analyses">
             <ArrowLeft size={18} color={Palette.text} />
           </Pressable>
         }
@@ -82,6 +106,40 @@ export default function MarkerDetailScreen() {
                 </AppText>
               </View>
             </View>
+
+            <Card style={{ gap: 12 }}>
+              <View style={styles.rowBetween}>
+                <View style={styles.inline}>
+                  <BellRing size={18} color={Palette.primary} />
+                  <AppText variant="labelMd">Fréquence de contrôle</AppText>
+                </View>
+                {savingFrequency && <ActivityIndicator size="small" color={Palette.primary} />}
+              </View>
+              <Segmented
+                options={[
+                  { id: 'none', label: 'Aucun suivi' },
+                  { id: '6', label: '6 mois' },
+                  { id: '12', label: '1 an' },
+                ]}
+                value={frequency}
+                onChange={changeFrequency}
+                style={savingFrequency ? { opacity: 0.5 } : undefined}
+              />
+              <AppText variant="bodySm" color={Palette.textMuted}>
+                {frequency === 'none'
+                  ? "Pas de rappel sur l'accueil pour cette molécule."
+                  : `Dans la norme : contrôle tous les ${frequency === '12' ? 'ans' : '6 mois'}. Hors norme : tous les ${OUT_OF_RANGE_RECHECK_MONTHS} mois.`}
+              </AppText>
+              {reminder && (
+                <AppText variant="labelMd" color={reminder.due ? Palette.coralDeep : Palette.text}>
+                  {!reminder.dueDate
+                    ? 'Aucune valeur : contrôle à faire'
+                    : reminder.due
+                    ? `Contrôle à faire depuis le ${frDate(reminder.dueDate)}`
+                    : `Prochain contrôle le ${frDate(reminder.dueDate)}`}
+                </AppText>
+              )}
+            </Card>
 
             <Segmented
               options={[

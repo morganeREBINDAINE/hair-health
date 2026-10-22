@@ -436,7 +436,7 @@ export default function CalendarScreen() {
               title="Prise de sang"
               subtitle={selectedBlood.notes || `${Object.keys(selectedBlood.values).length} valeurs enregistrées`}
               badge="Bilan"
-              onPress={() => router.push('/norms')}
+              onPress={() => router.push('/analyses')}
             />
           )}
         </View>

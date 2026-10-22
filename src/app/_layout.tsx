@@ -29,7 +29,7 @@ const TAB_LABELS: Record<string, string> = {
   index: 'Accueil',
   calendar: 'Calendrier',
   entry: 'Journal',
-  norms: 'Normes',
+  analyses: 'Analyses',
   settings: 'Paramètres',
 };
 
@@ -367,10 +367,10 @@ function AppRoot() {
         }}
       />
       <Tabs.Screen
-        name="norms"
+        name="analyses"
         options={{
-          title: 'Normes',
-          // Monté dès la connexion pour que les normes soient prêtes avant le premier clic
+          title: 'Analyses',
+          // Monté dès la connexion pour que les analyses soient prêtes avant le premier clic
           lazy: false,
           tabBarIcon: ({ color, size }) => <FlaskConical size={size || 21} color={color} />,
         }}
@@ -382,7 +382,7 @@ function AppRoot() {
           tabBarIcon: ({ color, size }) => <Settings size={size || 21} color={color} />,
         }}
       />
-      {/* Route cachée : détail d'une analyse, ouverte depuis Normes */}
+      {/* Route cachée : détail d'une analyse, ouverte depuis Analyses */}
       <Tabs.Screen
         name="marker/[id]"
         options={{ href: null, headerShown: false }}

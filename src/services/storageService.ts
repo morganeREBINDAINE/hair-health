@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DailyLog, DailyMedicationItem, FatigueLevel, LabMarkerDefinition, LabTest, MedicationDefinition, ShampooType, TreatmentPlan } from '../types';
+import { DailyLog, DailyMedicationItem, FatigueLevel, LabMarkerDefinition, LabTest, MedicalExam, MedicationDefinition, PlannedCheckup, ShampooType, TreatmentPlan } from '../types';
 import { supabase } from '../lib/supabase';
 
 const KEYS = {
@@ -8,7 +8,53 @@ const KEYS = {
   LAB_MARKERS: '@hair_tracker_lab_markers',
   LAB_TESTS: '@hair_tracker_lab_tests',
   TREATMENT_PLANS: '@hair_tracker_treatment_plans',
+  MEDICAL_EXAMS: '@hair_tracker_medical_exams',
+  PLANNED_CHECKUPS: '@hair_tracker_planned_checkups',
 };
+
+const EXAM_PHOTOS_BUCKET = 'exam-photos';
+
+function toRecheckMonths(raw: unknown): 6 | 12 | null {
+  return raw === 6 || raw === 12 ? raw : null;
+}
+
+function mapExamRow(row: any): MedicalExam {
+  return {
+    id: row.id,
+    type: row.type,
+    date: row.exam_date,
+    title: row.title ?? '',
+    location: row.location ?? '',
+    result: row.result ?? '',
+    photoPath: row.photo_path ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapCheckupRow(row: any): PlannedCheckup {
+  return {
+    id: row.id,
+    kind: row.kind,
+    date: row.planned_date,
+    markerCodes: row.marker_codes ?? [],
+    examLabel: row.exam_label ?? '',
+    note: row.note ?? '',
+    done: row.done ?? false,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function readCachedList<T>(key: string): Promise<T[]> {
+  const raw = await AsyncStorage.getItem(key);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
 
 async function getCurrentUserId(): Promise<string | null> {
   try {
@@ -105,6 +151,23 @@ export const StorageService = {
     } catch {
       return [];
     }
+  },
+
+  async getMedicalExams(): Promise<MedicalExam[]> {
+    const exams = await readCachedList<MedicalExam>(KEYS.MEDICAL_EXAMS);
+    return exams.sort((a, b) => b.date.localeCompare(a.date));
+  },
+
+  async getPlannedCheckups(): Promise<PlannedCheckup[]> {
+    const items = await readCachedList<PlannedCheckup>(KEYS.PLANNED_CHECKUPS);
+    return items.sort((a, b) => a.date.localeCompare(b.date));
+  },
+
+  /** URL temporaire (1 h) pour afficher une photo du bucket privé. */
+  async getExamPhotoUrl(path: string): Promise<string> {
+    const { data, error } = await supabase.storage.from(EXAM_PHOTOS_BUCKET).createSignedUrl(path, 3600);
+    if (error || !data) throw error ?? new Error('URL de photo indisponible');
+    return data.signedUrl;
   },
 
   getActivePlansForDate(plans: TreatmentPlan[], date: string): TreatmentPlan[] {
@@ -340,6 +403,7 @@ export const StorageService = {
       unit: marker.unit,
       description: marker.description,
       display_order: marker.displayOrder,
+      recheck_months: marker.recheckMonths ?? null,
     };
 
     if (existing) {
@@ -530,6 +594,120 @@ export const StorageService = {
     return updated;
   },
 
+  /**
+   * Enregistre un examen. `localPhotoUri` : nouvelle photo à envoyer ;
+   * `removePhoto` : supprime la photo existante.
+   */
+  async saveMedicalExam(
+    exam: MedicalExam,
+    options: { localPhotoUri?: string | null; removePhoto?: boolean } = {},
+  ): Promise<MedicalExam[]> {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Non authentifié');
+
+    const exams = await this.getMedicalExams();
+    const previousPath = exams.find((e) => e.id === exam.id)?.photoPath ?? null;
+    let photoPath = options.removePhoto ? null : exam.photoPath;
+    let uploadedPath: string | null = null;
+
+    if (options.localPhotoUri) {
+      const response = await fetch(options.localPhotoUri);
+      const body = await response.arrayBuffer();
+      uploadedPath = `${userId}/${exam.id}-${Date.now()}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from(EXAM_PHOTOS_BUCKET)
+        .upload(uploadedPath, body, { contentType: 'image/jpeg' });
+      if (uploadError) throw uploadError;
+      photoPath = uploadedPath;
+    }
+
+    const { data, error } = await supabase.from('medical_exams').upsert({
+      id: exam.id,
+      user_id: userId,
+      type: exam.type,
+      exam_date: exam.date,
+      title: exam.title,
+      location: exam.location,
+      result: exam.result,
+      photo_path: photoPath,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' }).select('*').single();
+
+    if (error || !data) {
+      // L'examen n'est pas enregistré : on retire la photo orpheline
+      if (uploadedPath) await supabase.storage.from(EXAM_PHOTOS_BUCKET).remove([uploadedPath]);
+      throw error ?? new Error('Examen non enregistré');
+    }
+
+    if (previousPath && previousPath !== photoPath) {
+      const { error: removeError } = await supabase.storage.from(EXAM_PHOTOS_BUCKET).remove([previousPath]);
+      if (removeError) console.warn('[storage] ancienne photo non supprimée', removeError);
+    }
+
+    const saved = mapExamRow(data);
+    const updated = [...exams.filter((e) => e.id !== saved.id), saved].sort((a, b) => b.date.localeCompare(a.date));
+    await AsyncStorage.setItem(KEYS.MEDICAL_EXAMS, JSON.stringify(updated));
+    return updated;
+  },
+
+  async deleteMedicalExam(id: string): Promise<MedicalExam[]> {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Non authentifié');
+
+    const exams = await this.getMedicalExams();
+    const photoPath = exams.find((e) => e.id === id)?.photoPath;
+
+    const { error } = await supabase.from('medical_exams').delete().eq('id', id).eq('user_id', userId);
+    if (error) throw error;
+
+    if (photoPath) {
+      const { error: removeError } = await supabase.storage.from(EXAM_PHOTOS_BUCKET).remove([photoPath]);
+      if (removeError) console.warn('[storage] photo non supprimée', removeError);
+    }
+
+    const updated = exams.filter((e) => e.id !== id);
+    await AsyncStorage.setItem(KEYS.MEDICAL_EXAMS, JSON.stringify(updated));
+    return updated;
+  },
+
+  async savePlannedCheckup(item: PlannedCheckup): Promise<PlannedCheckup[]> {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Non authentifié');
+
+    const { data, error } = await supabase.from('planned_checkups').upsert({
+      id: item.id,
+      user_id: userId,
+      kind: item.kind,
+      planned_date: item.date,
+      marker_codes: item.markerCodes,
+      exam_label: item.examLabel,
+      note: item.note,
+      done: item.done,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' }).select('*').single();
+
+    if (error || !data) throw error ?? new Error('Planification non enregistrée');
+
+    const saved = mapCheckupRow(data);
+    const items = await this.getPlannedCheckups();
+    const updated = [...items.filter((p) => p.id !== saved.id), saved].sort((a, b) => a.date.localeCompare(b.date));
+    await AsyncStorage.setItem(KEYS.PLANNED_CHECKUPS, JSON.stringify(updated));
+    return updated;
+  },
+
+  async deletePlannedCheckup(id: string): Promise<PlannedCheckup[]> {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Non authentifié');
+
+    const { error } = await supabase.from('planned_checkups').delete().eq('id', id).eq('user_id', userId);
+    if (error) throw error;
+
+    const items = await this.getPlannedCheckups();
+    const updated = items.filter((p) => p.id !== id);
+    await AsyncStorage.setItem(KEYS.PLANNED_CHECKUPS, JSON.stringify(updated));
+    return updated;
+  },
+
   // --- Synchronisation complète depuis le cloud (appelée à la connexion) ---
   async syncFromCloud(userId: string): Promise<{ synced: number }> {
     let synced = 0;
@@ -617,6 +795,7 @@ export const StorageService = {
       unit: m.unit,
       description: m.description ?? '',
       displayOrder: m.display_order ?? 0,
+      recheckMonths: toRecheckMonths(m.recheck_months),
     }));
     await AsyncStorage.setItem(KEYS.LAB_MARKERS, JSON.stringify(markers));
     synced += markers.length;
@@ -686,6 +865,26 @@ export const StorageService = {
     }));
     await AsyncStorage.setItem(KEYS.TREATMENT_PLANS, JSON.stringify(plans));
     synced += plans.length;
+
+    // ── 6. Examens médicaux ──
+    const { data: cloudExams, error: examsError } = await supabase
+      .from('medical_exams')
+      .select('*')
+      .eq('user_id', userId);
+    if (examsError) throw examsError;
+    const exams = (cloudExams ?? []).map(mapExamRow).sort((a, b) => b.date.localeCompare(a.date));
+    await AsyncStorage.setItem(KEYS.MEDICAL_EXAMS, JSON.stringify(exams));
+    synced += exams.length;
+
+    // ── 7. Planifications ──
+    const { data: cloudCheckups, error: checkupsError } = await supabase
+      .from('planned_checkups')
+      .select('*')
+      .eq('user_id', userId);
+    if (checkupsError) throw checkupsError;
+    const checkups = (cloudCheckups ?? []).map(mapCheckupRow).sort((a, b) => a.date.localeCompare(b.date));
+    await AsyncStorage.setItem(KEYS.PLANNED_CHECKUPS, JSON.stringify(checkups));
+    synced += checkups.length;
 
     return { synced };
   },
