@@ -8,6 +8,7 @@ import { Palette } from '../../constants/theme';
 import { AppText, Badge, Card, IconCircle, SkeletonCard } from '../ui';
 import { frDate } from '../../lib/dates';
 import { Toast } from '../../lib/toast';
+import { actionError } from '../../lib/errors';
 import { sharedStyles } from './shared';
 import { PlannedSection } from './Planning';
 import { ExamPhoto } from './ExamPhoto';
@@ -59,7 +60,7 @@ export function ExamsTab({
             onExamsChange(await StorageService.deleteMedicalExam(exam.id));
           } catch (e) {
             console.error('[analyses] suppression examen', e);
-            Toast.error('Connexion requise pour supprimer');
+            Toast.error(actionError(e, 'supprimer'));
           } finally {
             setDeletingId(null);
           }

@@ -4,10 +4,12 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { CheckupKind, LabMarkerDefinition, LabTest, MedicalExam, PlannedCheckup } from '../types';
 import { StorageService } from '../services/storageService';
 import { Toast } from '../lib/toast';
+import { actionError } from '../lib/errors';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
-import { DockClearance, Palette } from '../constants/theme';
-import { AppText, ScreenHeader, Segmented, SkeletonCard } from '../components/ui';
-import { FloatingActions, sharedStyles } from '../components/analyses/shared';
+import { CalendarClock, Plus } from 'lucide-react-native';
+import { Palette, Spacing } from '../constants/theme';
+import { AppText, PillButton, ScreenHeader, Segmented, SkeletonCard } from '../components/ui';
+import { sharedStyles } from '../components/analyses/shared';
 import { MoleculesTab } from '../components/analyses/MoleculesTab';
 import { BloodTestsTab } from '../components/analyses/BloodTestsTab';
 import { ExamsTab } from '../components/analyses/ExamsTab';
@@ -93,7 +95,7 @@ export default function AnalysesScreen() {
       setCheckups(await StorageService.savePlannedCheckup(item));
     } catch (e) {
       console.error('[analyses] enregistrement planification', e);
-      Toast.error('Connexion requise pour planifier');
+      Toast.error(actionError(e, 'planifier'));
       throw e;
     }
   };
@@ -109,7 +111,7 @@ export default function AnalysesScreen() {
             setCheckups(await StorageService.deletePlannedCheckup(item.id));
           } catch (e) {
             console.error('[analyses] suppression planification', e);
-            Toast.error('Connexion requise pour supprimer');
+            Toast.error(actionError(e, 'supprimer'));
           }
         },
       },
@@ -117,32 +119,56 @@ export default function AnalysesScreen() {
   };
 
   const pending = (kind: CheckupKind) => checkups.filter((c) => c.kind === kind && !c.done);
-  const hasFab = activeTab !== 'molecules';
+  const hasActions = activeTab !== 'molecules';
 
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Analyses" />
+      {/* Onglets et actions fixes : seule la liste défile */}
+      <View style={styles.fixedBar}>
+        <Segmented
+          options={[
+            { id: 'molecules', label: 'Molécules' },
+            { id: 'tests', label: loading ? 'Prises de sang' : `Prises de sang (${labTests.length})` },
+            { id: 'exams', label: loading ? 'Examens' : `Examens (${exams.length})` },
+          ]}
+          value={activeTab}
+          onChange={setActiveTab}
+        />
+        {hasActions && (
+          // Sur les écrans étroits, « Planifier » passe sous le bouton d'ajout plutôt que de tronquer le texte
+          <View style={styles.actions}>
+            <PillButton
+              label={activeTab === 'tests' ? 'Ajouter une prise de sang' : 'Ajouter un examen'}
+              icon={Plus}
+              variant="lime"
+              compact
+              disabled={loading}
+              onPress={() => (activeTab === 'tests' ? openBlood(null) : openExam(null))}
+              style={{ flexGrow: 1 }}
+            />
+            <PillButton
+              label="Planifier"
+              icon={CalendarClock}
+              variant="ghost"
+              compact
+              disabled={loading}
+              onPress={() => openPlan(activeTab === 'tests' ? 'blood' : 'exam')}
+              style={{ flexGrow: 1 }}
+            />
+          </View>
+        )}
+      </View>
       <ScrollView
-        contentContainerStyle={[sharedStyles.content, hasFab && { paddingBottom: DockClearance + 80 }]}
+        contentContainerStyle={sharedStyles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
-        <View style={{ gap: 14 }}>
-          {activeTab === 'molecules' && (
-            <AppText variant="bodyMd" color={Palette.textMuted}>
-              Valeurs cibles optimales pour stimuler le follicule et soutenir la repousse — souvent plus exigeantes que
-              les normes de laboratoire.
-            </AppText>
-          )}
-          <Segmented
-            options={[
-              { id: 'molecules', label: 'Molécules' },
-              { id: 'tests', label: loading ? 'Prises de sang' : `Prises de sang (${labTests.length})` },
-              { id: 'exams', label: loading ? 'Examens' : `Examens (${exams.length})` },
-            ]}
-            value={activeTab}
-            onChange={setActiveTab}
-          />
-        </View>
+        {activeTab === 'molecules' && (
+          <AppText variant="bodyMd" color={Palette.textMuted}>
+            Valeurs cibles optimales pour stimuler le follicule et soutenir la repousse — souvent plus exigeantes que
+            les normes de laboratoire.
+          </AppText>
+        )}
 
         {activeTab === 'molecules' &&
           (loading ? (
@@ -180,14 +206,6 @@ export default function AnalysesScreen() {
           />
         )}
       </ScrollView>
-
-      {hasFab && !loading && (
-        <FloatingActions
-          addLabel={activeTab === 'tests' ? 'Ajouter une prise de sang' : 'Ajouter un examen'}
-          onAdd={() => (activeTab === 'tests' ? openBlood(null) : openExam(null))}
-          onPlan={() => openPlan(activeTab === 'tests' ? 'blood' : 'exam')}
-        />
-      )}
 
       {bloodSheet && (
         <BloodTestSheet
@@ -229,4 +247,14 @@ export default function AnalysesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Palette.canvas },
+  fixedBar: {
+    paddingHorizontal: Spacing.margin,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 12,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
+  },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
 });

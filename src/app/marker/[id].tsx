@@ -9,6 +9,7 @@ import { AppText, Badge, Card, IconCircle, ScreenHeader, Segmented } from '../..
 import { TimeSeriesChart } from '../../components/charts';
 import { frDate, todayIso } from '../../lib/dates';
 import { Toast } from '../../lib/toast';
+import { actionError } from '../../lib/errors';
 import { computeRecheckReminders, OUT_OF_RANGE_RECHECK_MONTHS } from '../../lib/labStatus';
 
 type Frequency = 'none' | '6' | '12';
@@ -73,13 +74,13 @@ export default function MarkerDetailScreen() {
         await StorageService.ensureAutoCheckups(todayIso());
       } catch (e) {
         console.error('[marker] rendez-vous automatique', e);
-        Toast.error('Suivi enregistré, mais le rendez-vous automatique n’a pas pu être créé');
+        Toast.error(`Suivi enregistré, mais ${actionError(e, 'créer le rendez-vous automatique').toLowerCase()}`);
       }
       const markers = await StorageService.getLabMarkers();
       setMarker(markers.find((m) => m.id === marker.id) ?? null);
     } catch (e) {
       console.error('[marker] fréquence de suivi', e);
-      Toast.error('Connexion requise pour modifier le suivi');
+      Toast.error(actionError(e, 'modifier le suivi'));
     } finally {
       setSavingFrequency(false);
     }

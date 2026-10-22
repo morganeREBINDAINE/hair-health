@@ -8,12 +8,13 @@ import { Palette, Radius } from '../../constants/theme';
 import { AppText, PillButton, inputStyle } from '../ui';
 import { todayIso } from '../../lib/dates';
 import { Toast } from '../../lib/toast';
+import { actionError } from '../../lib/errors';
 import { BottomSheet, DateField, Field } from './shared';
 
 /**
  * Saisie / modification d'une prise de sang.
  * À monter avec une `key` propre à chaque ouverture : l'état initial vient des props.
- * `fromPlan` : planification réalisée, marquée faite une fois le bilan enregistré.
+ * `fromPlan` : planification réalisée, supprimée une fois le bilan enregistré.
  */
 export function BloodTestSheet({
   visible,
@@ -83,18 +84,18 @@ export function BloodTestSheet({
       );
     } catch (e) {
       console.error('[analyses] enregistrement prise de sang', e);
-      Toast.error('Connexion requise pour enregistrer');
+      Toast.error(actionError(e, 'enregistrer le bilan'));
       setSaving(false);
       return;
     }
 
     if (fromPlan) {
       try {
-        const checkups = await StorageService.savePlannedCheckup({ ...fromPlan, done: true });
-        onCheckupsChange?.(checkups);
+        // Le rendez-vous est réalisé : on ne garde que le résultat
+        onCheckupsChange?.(await StorageService.deletePlannedCheckup(fromPlan.id));
       } catch (e) {
-        console.error('[analyses] clôture planification', e);
-        Toast.error('Bilan enregistré, mais le rendez-vous reste ouvert');
+        console.error('[analyses] suppression planification réalisée', e);
+        Toast.error(`Bilan enregistré, mais ${actionError(e, 'retirer le rendez-vous').toLowerCase()}`);
       }
     }
     setSaving(false);

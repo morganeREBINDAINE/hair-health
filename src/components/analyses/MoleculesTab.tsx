@@ -8,6 +8,7 @@ import { Palette, Radius } from '../../constants/theme';
 import { AppText, Badge, Card, IconCircle, PillButton, inputStyle } from '../ui';
 import { frDate } from '../../lib/dates';
 import { Toast } from '../../lib/toast';
+import { actionError } from '../../lib/errors';
 import { latestValues, normalizeSearch, statusOf } from '../../lib/labStatus';
 import { AddRow, BottomSheet, Field, RangeTrack, STATUS_BADGE, sharedStyles } from './shared';
 
@@ -73,7 +74,7 @@ export function MoleculesTab({
       onMarkersChange(await StorageService.saveLabMarker({ ...m, hidden: !m.hidden }));
     } catch (e) {
       console.error('[analyses] masquage molécule', e);
-      Toast.error('Connexion requise pour modifier');
+      Toast.error(actionError(e, 'modifier'));
     } finally {
       setBusyMarkerId(null);
     }
@@ -93,7 +94,7 @@ export function MoleculesTab({
               onMarkersChange(await StorageService.deleteLabMarker(m.id));
             } catch (e) {
               console.error('[analyses] suppression molécule', e);
-              Toast.error('Connexion requise pour supprimer');
+              Toast.error(actionError(e, 'supprimer'));
             }
           },
         },
@@ -132,7 +133,7 @@ export function MoleculesTab({
       setShowModal(false);
     } catch (e) {
       console.error('[analyses] enregistrement molécule', e);
-      Toast.error('Connexion requise pour enregistrer');
+      Toast.error(actionError(e, 'enregistrer'));
     } finally {
       setSaving(false);
     }

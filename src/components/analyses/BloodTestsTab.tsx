@@ -1,15 +1,15 @@
-import React from 'react';
-import { View, Pressable, Alert } from 'react-native';
 import { CalendarDays, CircleCheck, Pencil, Syringe, Trash2, TriangleAlert } from 'lucide-react-native';
-import { LabMarkerDefinition, LabTest, PlannedCheckup } from '../../types';
-import { StorageService } from '../../services/storageService';
+import { Alert, Pressable, View } from 'react-native';
 import { Palette } from '../../constants/theme';
-import { AppText, Badge, Card, IconCircle, SkeletonCard } from '../ui';
 import { frDate } from '../../lib/dates';
-import { Toast } from '../../lib/toast';
 import { statusOf } from '../../lib/labStatus';
-import { STATUS_BADGE, sharedStyles } from './shared';
+import { Toast } from '../../lib/toast';
+import { actionError } from '../../lib/errors';
+import { StorageService } from '../../services/storageService';
+import { LabMarkerDefinition, LabTest, PlannedCheckup } from '../../types';
+import { AppText, Badge, Card, IconCircle, SkeletonCard } from '../ui';
 import { PlannedSection } from './Planning';
+import { STATUS_BADGE, sharedStyles } from './shared';
 
 export function BloodTestsTab({
   loading,
@@ -54,7 +54,7 @@ export function BloodTestsTab({
             onLabTestsChange(await StorageService.deleteLabTest(id));
           } catch (e) {
             console.error('[analyses] suppression prise de sang', e);
-            Toast.error('Connexion requise pour supprimer');
+            Toast.error(actionError(e, 'supprimer'));
           }
         },
       },
@@ -130,8 +130,8 @@ export function BloodTestsTab({
                         st === 'low' && marker
                           ? `< ${marker.minFunctional}`
                           : st === 'high' && marker
-                          ? `> ${marker.maxFunctional}`
-                          : b.label
+                            ? `> ${marker.maxFunctional}`
+                            : b.label
                       }
                       tone={b.tone}
                       icon={st === 'ok' ? CircleCheck : TriangleAlert}

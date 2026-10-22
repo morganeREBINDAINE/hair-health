@@ -10,13 +10,14 @@ import { Palette } from '../../constants/theme';
 import { PillButton, Segmented, inputStyle } from '../ui';
 import { todayIso } from '../../lib/dates';
 import { Toast } from '../../lib/toast';
+import { actionError } from '../../lib/errors';
 import { BottomSheet, DateField, Field, sharedStyles } from './shared';
 import { ExamPhoto, photoStyles } from './ExamPhoto';
 
 /**
  * Saisie / modification d'un examen (radio, échographie) avec photo facultative.
  * À monter avec une `key` propre à chaque ouverture : l'état initial vient des props.
- * `fromPlan` : planification réalisée, marquée faite une fois l'examen enregistré.
+ * `fromPlan` : planification réalisée, supprimée une fois l'examen enregistré.
  */
 export function ExamSheet({
   visible,
@@ -104,17 +105,17 @@ export function ExamSheet({
       );
     } catch (e) {
       console.error('[analyses] enregistrement examen', e);
-      Toast.error("Impossible d'enregistrer l'examen. Vérifie ta connexion.");
+      Toast.error(actionError(e, "enregistrer l'examen"));
       setSaving(false);
       return;
     }
     if (fromPlan) {
       try {
-        const checkups = await StorageService.savePlannedCheckup({ ...fromPlan, done: true });
-        onCheckupsChange?.(checkups);
+        // Le rendez-vous est réalisé : on ne garde que le résultat
+        onCheckupsChange?.(await StorageService.deletePlannedCheckup(fromPlan.id));
       } catch (e) {
-        console.error('[analyses] clôture planification', e);
-        Toast.error('Examen enregistré, mais le rendez-vous reste ouvert');
+        console.error('[analyses] suppression planification réalisée', e);
+        Toast.error(`Examen enregistré, mais ${actionError(e, 'retirer le rendez-vous').toLowerCase()}`);
       }
     }
     setSaving(false);
