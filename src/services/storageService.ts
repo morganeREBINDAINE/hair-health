@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DailyLog, DailyMedicationItem, FatigueLevel, LabMarkerDefinition, LabTest, MedicalExam, MedicationDefinition, PlannedCheckup, ShampooType, TreatmentPlan } from '../types';
+import * as Crypto from 'expo-crypto';
 import { supabase } from '../lib/supabase';
+import { computeRecheckReminders } from '../lib/labStatus';
 
 const KEYS = {
   DAILY_LOGS: '@hair_tracker_daily_logs',
@@ -41,6 +43,7 @@ function mapCheckupRow(row: any): PlannedCheckup {
     examLabel: row.exam_label ?? '',
     note: row.note ?? '',
     done: row.done ?? false,
+    isAuto: row.is_auto ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -404,6 +407,7 @@ export const StorageService = {
       description: marker.description,
       display_order: marker.displayOrder,
       recheck_months: marker.recheckMonths ?? null,
+      auto_planned_key: marker.autoPlannedKey ?? null,
     };
 
     if (existing) {
@@ -683,6 +687,7 @@ export const StorageService = {
       exam_label: item.examLabel,
       note: item.note,
       done: item.done,
+      is_auto: item.isAuto ?? false,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'id' }).select('*').single();
 
@@ -706,6 +711,55 @@ export const StorageService = {
     const updated = items.filter((p) => p.id !== id);
     await AsyncStorage.setItem(KEYS.PLANNED_CHECKUPS, JSON.stringify(updated));
     return updated;
+  },
+
+  /**
+   * Crée (ou complète) le rendez-vous automatique de prise de sang pour les molécules
+   * dont le contrôle est arrivé à échéance. Chaque échéance n'est planifiée qu'une fois,
+   * même si le rendez-vous est ensuite supprimé. Retourne vrai si quelque chose a changé.
+   */
+  async ensureAutoCheckups(today: string): Promise<boolean> {
+    const userId = await getCurrentUserId();
+    if (!userId) return false;
+
+    const [markers, tests, checkups] = await Promise.all([
+      this.getLabMarkers(),
+      this.getLabTests(),
+      this.getPlannedCheckups(),
+    ]);
+    const toPlan = computeRecheckReminders(tests, markers, today)
+      .filter((r) => r.due)
+      .map((r) => ({ marker: r.marker, key: r.dueDate ?? 'initial' }))
+      .filter(({ marker, key }) => marker.autoPlannedKey !== key);
+    if (toPlan.length === 0) return false;
+
+    const pending = checkups.find((c) => c.isAuto && c.kind === 'blood' && !c.done);
+    const codes = new Set(pending?.markerCodes ?? []);
+    toPlan.forEach(({ marker }) => codes.add(marker.code));
+
+    await this.savePlannedCheckup({
+      id: pending?.id ?? Crypto.randomUUID(),
+      kind: 'blood',
+      date: pending?.date ?? today,
+      markerCodes: [...codes],
+      examLabel: '',
+      note: pending?.note ?? 'Contrôle de suivi',
+      done: false,
+      isAuto: true,
+    });
+
+    // Mémorise l'échéance traitée pour ne pas recréer le rendez-vous s'il est supprimé
+    const updatedMarkers = [...markers];
+    for (const { marker, key } of toPlan) {
+      const { error } = await supabase.from('lab_marker_definitions')
+        .update({ auto_planned_key: key })
+        .eq('id', marker.id).eq('user_id', userId);
+      if (error) throw error;
+      const i = updatedMarkers.findIndex((m) => m.id === marker.id);
+      if (i >= 0) updatedMarkers[i] = { ...updatedMarkers[i], autoPlannedKey: key };
+    }
+    await AsyncStorage.setItem(KEYS.LAB_MARKERS, JSON.stringify(updatedMarkers));
+    return true;
   },
 
   // --- Synchronisation complète depuis le cloud (appelée à la connexion) ---
@@ -796,6 +850,7 @@ export const StorageService = {
       description: m.description ?? '',
       displayOrder: m.display_order ?? 0,
       recheckMonths: toRecheckMonths(m.recheck_months),
+      autoPlannedKey: m.auto_planned_key ?? null,
     }));
     await AsyncStorage.setItem(KEYS.LAB_MARKERS, JSON.stringify(markers));
     synced += markers.length;

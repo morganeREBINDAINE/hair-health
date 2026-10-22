@@ -5,7 +5,7 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 const statusListeners = new Set<Listener>();
 
-// Vrai pendant la synchro cloud qui suit une connexion : l'app affiche alors un loader plein écran
+// Vrai pendant la synchro cloud qui suit une connexion : les écrans affichent alors des squelettes
 let initialSyncing = false;
 
 export const SyncEvent = {

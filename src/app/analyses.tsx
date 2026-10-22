@@ -4,33 +4,40 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { CheckupKind, LabMarkerDefinition, LabTest, MedicalExam, PlannedCheckup } from '../types';
 import { StorageService } from '../services/storageService';
 import { Toast } from '../lib/toast';
-import { SyncEvent } from '../lib/syncEvent';
-import { DataLoading } from '../components/DataLoader';
-import { Palette } from '../constants/theme';
-import { AppText, ScreenHeader, Segmented } from '../components/ui';
-import { sharedStyles } from '../components/analyses/shared';
+import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
+import { DockClearance, Palette } from '../constants/theme';
+import { AppText, ScreenHeader, Segmented, SkeletonCard } from '../components/ui';
+import { FloatingActions, sharedStyles } from '../components/analyses/shared';
 import { MoleculesTab } from '../components/analyses/MoleculesTab';
 import { BloodTestsTab } from '../components/analyses/BloodTestsTab';
 import { ExamsTab } from '../components/analyses/ExamsTab';
+import { BloodTestSheet } from '../components/analyses/BloodTestSheet';
+import { ExamSheet } from '../components/analyses/ExamSheet';
 import { PlanningSheet, checkupLabel } from '../components/analyses/Planning';
 
 type AnalysesTab = 'molecules' | 'tests' | 'exams';
 const TABS: AnalysesTab[] = ['molecules', 'tests', 'exams'];
 
+/** Formulaire ouvert : `session` sert de `key` pour repartir d'un état vierge à chaque ouverture. */
+type SheetState<T> = { session: number; editing: T | null; fromPlan: PlannedCheckup | null };
+
 export default function AnalysesScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
+  const initialSyncing = useInitialSyncing();
   const [activeTab, setActiveTab] = useState<AnalysesTab>('molecules');
   const [markers, setMarkers] = useState<LabMarkerDefinition[]>([]);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const [exams, setExams] = useState<MedicalExam[]>([]);
   const [checkups, setCheckups] = useState<PlannedCheckup[]>([]);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [cacheLoading, setCacheLoading] = useState(true);
+  const loading = cacheLoading || initialSyncing;
 
-  // Planification
-  const [planVisible, setPlanVisible] = useState(false);
-  const [planKind, setPlanKind] = useState<CheckupKind>('blood');
-  const [editingPlan, setEditingPlan] = useState<PlannedCheckup | null>(null);
-  const [planSession, setPlanSession] = useState(0);
+  const [session, setSession] = useState(0);
+  const [bloodSheet, setBloodSheet] = useState<SheetState<LabTest> | null>(null);
+  const [examSheet, setExamSheet] = useState<SheetState<MedicalExam> | null>(null);
+  const [planSheet, setPlanSheet] = useState<{ session: number; kind: CheckupKind; editing: PlannedCheckup | null } | null>(
+    null,
+  );
 
   const loadAll = useCallback(async () => {
     try {
@@ -48,7 +55,7 @@ export default function AnalysesScreen() {
       console.error('[analyses] chargement', e);
       Toast.error('Impossible de charger les analyses');
     } finally {
-      setInitialLoading(false);
+      setCacheLoading(false);
     }
   }, []);
 
@@ -66,19 +73,20 @@ export default function AnalysesScreen() {
     }, [loadAll, params.tab]),
   );
 
-  const openPlan = (kind: CheckupKind) => {
-    setEditingPlan(null);
-    setPlanKind(kind);
-    setPlanSession((n) => n + 1);
-    setPlanVisible(true);
+  const nextSession = () => {
+    const n = session + 1;
+    setSession(n);
+    return n;
   };
 
-  const editPlan = (item: PlannedCheckup) => {
-    setEditingPlan(item);
-    setPlanKind(item.kind);
-    setPlanSession((n) => n + 1);
-    setPlanVisible(true);
-  };
+  const openBlood = (editing: LabTest | null, fromPlan: PlannedCheckup | null = null) =>
+    setBloodSheet({ session: nextSession(), editing, fromPlan });
+  const openExam = (editing: MedicalExam | null, fromPlan: PlannedCheckup | null = null) =>
+    setExamSheet({ session: nextSession(), editing, fromPlan });
+  const openPlan = (kind: CheckupKind, editing: PlannedCheckup | null = null) =>
+    setPlanSheet({ session: nextSession(), kind, editing });
+
+  const completePlan = (item: PlannedCheckup) => (item.kind === 'blood' ? openBlood(null, item) : openExam(null, item));
 
   const savePlan = async (item: PlannedCheckup) => {
     try {
@@ -86,16 +94,6 @@ export default function AnalysesScreen() {
     } catch (e) {
       console.error('[analyses] enregistrement planification', e);
       Toast.error('Connexion requise pour planifier');
-      throw e;
-    }
-  };
-
-  const markDone = async (item: PlannedCheckup) => {
-    try {
-      setCheckups(await StorageService.savePlannedCheckup({ ...item, done: true }));
-    } catch (e) {
-      console.error('[analyses] clôture planification', e);
-      Toast.error('Résultat enregistré, mais la planification reste ouverte');
       throw e;
     }
   };
@@ -119,21 +117,13 @@ export default function AnalysesScreen() {
   };
 
   const pending = (kind: CheckupKind) => checkups.filter((c) => c.kind === kind && !c.done);
-
-  if (initialLoading) {
-    return (
-      <View style={styles.screen}>
-        <ScreenHeader title="Analyses" />
-        <DataLoading />
-      </View>
-    );
-  }
+  const hasFab = activeTab !== 'molecules';
 
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Analyses" />
       <ScrollView
-        contentContainerStyle={sharedStyles.content}
+        contentContainerStyle={[sharedStyles.content, hasFab && { paddingBottom: DockClearance + 80 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
         <View style={{ gap: 14 }}>
@@ -146,52 +136,93 @@ export default function AnalysesScreen() {
           <Segmented
             options={[
               { id: 'molecules', label: 'Molécules' },
-              { id: 'tests', label: `Prises de sang (${labTests.length})` },
-              { id: 'exams', label: `Examens (${exams.length})` },
+              { id: 'tests', label: loading ? 'Prises de sang' : `Prises de sang (${labTests.length})` },
+              { id: 'exams', label: loading ? 'Examens' : `Examens (${exams.length})` },
             ]}
             value={activeTab}
             onChange={setActiveTab}
           />
         </View>
 
-        {activeTab === 'molecules' && (
-          <MoleculesTab markers={markers} labTests={labTests} onMarkersChange={setMarkers} />
-        )}
+        {activeTab === 'molecules' &&
+          (loading ? (
+            <>
+              <SkeletonCard lines={3} height={190} />
+              <SkeletonCard lines={3} height={190} />
+            </>
+          ) : (
+            <MoleculesTab markers={markers} labTests={labTests} onMarkersChange={setMarkers} />
+          ))}
         {activeTab === 'tests' && (
           <BloodTestsTab
+            loading={loading}
             markers={markers}
             labTests={labTests}
             onLabTestsChange={setLabTests}
             planned={pending('blood')}
-            onPlan={() => openPlan('blood')}
-            onEditPlan={editPlan}
+            onEditTest={(t) => openBlood(t)}
+            onCompletePlan={completePlan}
+            onEditPlan={(item) => openPlan(item.kind, item)}
             onDeletePlan={deletePlan}
-            onCheckupDone={markDone}
           />
         )}
         {activeTab === 'exams' && (
           <ExamsTab
+            loading={loading}
             exams={exams}
             onExamsChange={setExams}
             markers={markers}
             planned={pending('exam')}
-            onPlan={() => openPlan('exam')}
-            onEditPlan={editPlan}
+            onEditExam={(e) => openExam(e)}
+            onCompletePlan={completePlan}
+            onEditPlan={(item) => openPlan(item.kind, item)}
             onDeletePlan={deletePlan}
-            onCheckupDone={markDone}
           />
         )}
       </ScrollView>
 
-      <PlanningSheet
-        key={planSession}
-        visible={planVisible}
-        onClose={() => setPlanVisible(false)}
-        initialKind={planKind}
-        editing={editingPlan}
-        markers={markers}
-        onSave={savePlan}
-      />
+      {hasFab && !loading && (
+        <FloatingActions
+          addLabel={activeTab === 'tests' ? 'Ajouter une prise de sang' : 'Ajouter un examen'}
+          onAdd={() => (activeTab === 'tests' ? openBlood(null) : openExam(null))}
+          onPlan={() => openPlan(activeTab === 'tests' ? 'blood' : 'exam')}
+        />
+      )}
+
+      {bloodSheet && (
+        <BloodTestSheet
+          key={bloodSheet.session}
+          visible
+          onClose={() => setBloodSheet(null)}
+          markers={markers}
+          editing={bloodSheet.editing}
+          fromPlan={bloodSheet.fromPlan}
+          onTestsChange={setLabTests}
+          onCheckupsChange={setCheckups}
+        />
+      )}
+      {examSheet && (
+        <ExamSheet
+          key={examSheet.session}
+          visible
+          onClose={() => setExamSheet(null)}
+          editing={examSheet.editing}
+          fromPlan={examSheet.fromPlan}
+          onExamsChange={setExams}
+          onCheckupsChange={setCheckups}
+        />
+      )}
+      {planSheet && (
+        <PlanningSheet
+          key={planSheet.session}
+          visible
+          onClose={() => setPlanSheet(null)}
+          initialKind={planSheet.kind}
+          editing={planSheet.editing}
+          markers={markers}
+          onSave={savePlan}
+        />
+      )}
     </View>
   );
 }

@@ -80,6 +80,8 @@ export interface LabMarkerDefinition {
   hidden?: boolean;
   /** Fréquence de contrôle quand la valeur est dans la norme (6 ou 12 mois). Absent = pas de rappel. */
   recheckMonths?: 6 | 12 | null;
+  /** Échéance (date ou « initial ») déjà couverte par un rendez-vous automatique. */
+  autoPlannedKey?: string | null;
 }
 
 export interface LabTestValue {
@@ -170,6 +172,8 @@ export interface PlannedCheckup {
   examLabel: string;
   note: string;
   done: boolean;
+  /** Créé automatiquement à l'échéance d'un contrôle. */
+  isAuto?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -17,21 +17,22 @@ import {
   NotebookPen,
   Sparkles,
   Clock,
-  Repeat,
   ScanLine,
+  CircleCheck,
 } from 'lucide-react-native';
 import { Palette, Spacing, DockClearance, Type } from '../constants/theme';
 import { StorageService } from '../services/storageService';
 import { CyclePrediction, CycleStatus, DailyLog, LabMarkerDefinition, LabTest, PlannedCheckup, TreatmentPlan } from '../types';
 import { todayIso, shiftIso, dayShort, daysBetween, frDate } from '../lib/dates';
 import { getCycleStatus, getPeriods, predictNextPeriod } from '../lib/cycle';
-import { AppText, Badge, Card, IconCircle, ScreenHeader, type BadgeTone } from '../components/ui';
+import { AppText, Badge, Card, IconCircle, ScreenHeader, Skeleton, SkeletonCard, type BadgeTone } from '../components/ui';
 import { PillBarChart } from '../components/charts';
-import { DataLoading } from '../components/DataLoader';
-import { SyncEvent } from '../lib/syncEvent';
+import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
 import { computeRecheckReminders, type RecheckReminder } from '../lib/labStatus';
 import { checkupLabel } from '../components/analyses/Planning';
+import { BloodTestSheet } from '../components/analyses/BloodTestSheet';
+import { ExamSheet } from '../components/analyses/ExamSheet';
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
@@ -44,6 +45,10 @@ export default function DashboardScreen() {
   const [labMarkers, setLabMarkers] = useState<LabMarkerDefinition[]>([]);
   const [treatmentPlans, setTreatmentPlans] = useState<TreatmentPlan[]>([]);
   const [checkups, setCheckups] = useState<PlannedCheckup[]>([]);
+  const initialSyncing = useInitialSyncing();
+  // Rendez-vous en cours de saisie (« C'est fait ») ; `session` sert de key au formulaire
+  const [completing, setCompleting] = useState<{ item: PlannedCheckup; session: number } | null>(null);
+  const [completeSession, setCompleteSession] = useState(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -86,14 +91,14 @@ export default function DashboardScreen() {
     setRefreshing(false);
   };
 
-  if (initialLoading) {
-    return (
-      <View style={styles.screen}>
-        <ScreenHeader title="Accueil" />
-        <DataLoading />
-      </View>
-    );
+  if (initialLoading || initialSyncing) {
+    return <DashboardSkeleton />;
   }
+
+  const openCompletion = (item: PlannedCheckup) => {
+    setCompleteSession((n) => n + 1);
+    setCompleting({ item, session: completeSession + 1 });
+  };
 
   // ── Fenêtres de 7 jours ──
   const todayStr = todayIso();
@@ -128,7 +133,6 @@ export default function DashboardScreen() {
   const todayLog = logsByDate.get(todayStr);
   const takenMeds = todayLog?.medications.filter((m) => m.taken) ?? [];
   const activePlans = StorageService.getActivePlansForDate(treatmentPlans, todayStr);
-  const fondPlans = activePlans.filter((p) => p.type === 'fond');
   const curePlans = activePlans.filter((p) => p.type === 'cure');
 
   // ── Cycle menstruel ──
@@ -139,6 +143,9 @@ export default function DashboardScreen() {
   // ── Contrôles à prévoir et rendez-vous planifiés ──
   const reminders = computeRecheckReminders(labTests, labMarkers, todayStr);
   const upcoming = checkups.filter((c) => !c.done);
+  // Les contrôles échus deviennent des rendez-vous : on ne garde ici que ceux qui n'en ont pas encore
+  const plannedCodes = new Set(upcoming.filter((c) => c.kind === 'blood').flatMap((c) => c.markerCodes));
+  const nextChecks = reminders.filter((r) => !r.due || !plannedCodes.has(r.marker.code));
 
   // ── Graphique chute ──
   const hairChartData = logs
@@ -178,8 +185,6 @@ export default function DashboardScreen() {
             <ChevronRight size={20} color={Palette.text} />
           </Card>
         )}
-
-        <CycleRow status={cycleStatus} prediction={cyclePrediction} onPress={() => router.push('/entry')} />
 
         {/* Bento duo */}
         <View style={styles.bento}>
@@ -241,6 +246,8 @@ export default function DashboardScreen() {
             </View>
           </Card>
         </View>
+
+        <CycleRow status={cycleStatus} prediction={cyclePrediction} onPress={() => router.push('/entry')} />
 
         {/* Évolution hebdomadaire */}
         <Card style={{ gap: 16 }}>
@@ -306,48 +313,6 @@ export default function DashboardScreen() {
           )}
         </Card>
 
-        {/* Traitement de fond */}
-        <View style={{ gap: 8 }}>
-          <View style={[styles.rowBetween, { paddingHorizontal: 4 }]}>
-            <AppText variant="headlineSm">Traitement de fond</AppText>
-            <Pressable onPress={() => router.push('/settings')} hitSlop={8}>
-              <AppText variant="labelSm" color={Palette.primary}>
-                Configurer
-              </AppText>
-            </Pressable>
-          </View>
-          {fondPlans.length > 0 ? (
-            fondPlans.map((p) => (
-              <CareRow
-                key={p.id}
-                icon={Repeat}
-                iconBg={Palette.limeSoft}
-                iconColor={Palette.primary}
-                title={p.name}
-                subtitle={p.dosage}
-                done={takenMeds.some((m) => m.name.toLowerCase() === p.name.toLowerCase())}
-                onPress={() => router.push('/entry')}
-              />
-            ))
-          ) : (
-            <CareRow
-              icon={Pill}
-              iconBg={Palette.limeSoft}
-              iconColor={Palette.primary}
-              title="Compléments quotidiens"
-              subtitle={
-                takenMeds.length > 0
-                  ? takenMeds.map((m) => m.name).join(', ')
-                  : todayLog
-                  ? 'Aucun complément coché'
-                  : 'Pas encore renseigné'
-              }
-              done={takenMeds.length > 0}
-              onPress={() => router.push('/entry')}
-            />
-          )}
-        </View>
-
         {/* Cure en cours */}
         {curePlans.length > 0 && (
           <View style={{ gap: 8 }}>
@@ -377,26 +342,30 @@ export default function DashboardScreen() {
               <AppText variant="headlineSm">Rendez-vous planifiés</AppText>
               <Badge label={String(upcoming.length)} tone="limeSoft" />
             </View>
-            {upcoming.map((c) => {
-              const days = daysBetween(todayStr, c.date);
-              return (
-                <CareRow
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.carousel}
+              style={styles.carouselBleed}>
+              {upcoming.map((c) => (
+                <PlannedCard
                   key={c.id}
-                  icon={c.kind === 'blood' ? Droplet : ScanLine}
-                  iconBg={Palette.limeSoft}
-                  iconColor={Palette.primary}
-                  title={checkupLabel(c, labMarkers)}
-                  subtitle={`${c.kind === 'blood' ? 'Prise de sang' : 'Examen'} · ${frDate(c.date)}${c.note ? ` · ${c.note}` : ''}`}
-                  badge={days < 0 ? `En retard ${-days} j` : days === 0 ? "Aujourd'hui" : `Dans ${days} j`}
-                  onPress={() => router.push({ pathname: '/analyses', params: { tab: c.kind === 'blood' ? 'tests' : 'exams' } })}
+                  item={c}
+                  label={checkupLabel(c, labMarkers)}
+                  today={todayStr}
+                  single={upcoming.length === 1}
+                  onOpen={() =>
+                    router.push({ pathname: '/analyses', params: { tab: c.kind === 'blood' ? 'tests' : 'exams' } })
+                  }
+                  onDone={() => openCompletion(c)}
                 />
-              );
-            })}
+              ))}
+            </ScrollView>
           </View>
         )}
 
         {/* Contrôles à prévoir (molécules avec fréquence de suivi) */}
-        {reminders.length > 0 && (
+        {nextChecks.length > 0 && (
           <View style={{ gap: 8 }}>
             <View style={[styles.rowBetween, { paddingHorizontal: 4 }]}>
               <AppText variant="headlineSm">Prochaines prises de sang</AppText>
@@ -406,7 +375,7 @@ export default function DashboardScreen() {
                 </AppText>
               </Pressable>
             </View>
-            {reminders.map((r) => (
+            {nextChecks.map((r) => (
               <BloodCheckRow
                 key={r.marker.id}
                 check={r}
@@ -432,7 +401,138 @@ export default function DashboardScreen() {
           )}
         </Card>
       </ScrollView>
+
+      {completing?.item.kind === 'blood' && (
+        <BloodTestSheet
+          key={completing.session}
+          visible
+          onClose={() => setCompleting(null)}
+          markers={labMarkers}
+          editing={null}
+          fromPlan={completing.item}
+          onTestsChange={setLabTests}
+          onCheckupsChange={setCheckups}
+        />
+      )}
+      {completing?.item.kind === 'exam' && (
+        <ExamSheet
+          key={completing.session}
+          visible
+          onClose={() => setCompleting(null)}
+          editing={null}
+          fromPlan={completing.item}
+          // L'accueil n'affiche pas la liste des examens
+          onExamsChange={() => {}}
+          onCheckupsChange={setCheckups}
+        />
+      )}
     </View>
+  );
+}
+
+/** Accueil pendant le chargement : la structure est affichée, les données sont remplacées par des squelettes. */
+function DashboardSkeleton() {
+  return (
+    <View style={styles.screen}>
+      <ScreenHeader title="Accueil" />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={false}>
+        <View>
+          <AppText variant="labelMd" color={Palette.textVariant}>
+            Bonjour 👋
+          </AppText>
+          <AppText variant="headlineLg" style={{ marginTop: 4 }}>
+            Comment te sens-tu aujourd&apos;hui ?
+          </AppText>
+        </View>
+        <View style={styles.bento}>
+          <Card style={[styles.bentoCard, { height: 168, gap: 12, justifyContent: 'flex-start' }]}>
+            <Skeleton width={36} height={36} radius={18} />
+            <Skeleton width="60%" height={34} />
+            <Skeleton width="80%" height={12} />
+          </Card>
+          <Card style={[styles.bentoCard, { height: 168, gap: 12, justifyContent: 'flex-start' }]}>
+            <Skeleton width={36} height={36} radius={18} />
+            <Skeleton width="60%" height={34} />
+            <Skeleton width="80%" height={12} />
+          </Card>
+        </View>
+        <SkeletonCard lines={1} />
+        <Card style={{ gap: 16 }}>
+          <Skeleton width="50%" height={20} />
+          <Skeleton height={120} radius={16} />
+        </Card>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <Skeleton width={240} height={150} radius={24} />
+          <Skeleton width={240} height={150} radius={24} />
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+/** Carte de rendez-vous : verte pour un examen, rouge pour une prise de sang. */
+function PlannedCard({
+  item,
+  label,
+  today,
+  single,
+  onOpen,
+  onDone,
+}: {
+  item: PlannedCheckup;
+  label: string;
+  today: string;
+  single: boolean;
+  onOpen: () => void;
+  onDone: () => void;
+}) {
+  const blood = item.kind === 'blood';
+  const fg = blood ? '#FFFFFF' : Palette.obsidian;
+  const muted = blood ? 'rgba(255,255,255,0.85)' : 'rgba(18,22,20,0.7)';
+  const days = daysBetween(today, item.date);
+  const when = days < 0 ? `En retard ${-days} j` : days === 0 ? "Aujourd'hui" : `Dans ${days} j`;
+
+  return (
+    <Pressable
+      onPress={onOpen}
+      style={({ pressed }) => [
+        styles.plannedCard,
+        single && { width: undefined, flex: 1 },
+        { backgroundColor: blood ? Palette.coralDeep : Palette.lime },
+        pressed && { transform: [{ scale: 0.985 }] },
+      ]}>
+      <View style={styles.rowBetween}>
+        <IconCircle
+          icon={blood ? Droplet : ScanLine}
+          size={40}
+          bg={blood ? 'rgba(255,255,255,0.2)' : 'rgba(18,22,20,0.08)'}
+          color={fg}
+        />
+        <Badge label={when} tone={blood ? 'light' : 'dark'} />
+      </View>
+      <View style={{ gap: 2, flex: 1 }}>
+        <AppText variant="labelSm" color={muted}>
+          {blood ? 'Prise de sang' : 'Examen'} · {frDate(item.date)}
+        </AppText>
+        <AppText variant="labelMd" color={fg} style={{ fontSize: 15 }} numberOfLines={2}>
+          {label}
+        </AppText>
+        {item.note ? (
+          <AppText variant="bodySm" color={muted} numberOfLines={1}>
+            {item.note}
+          </AppText>
+        ) : null}
+      </View>
+      <Pressable
+        onPress={onDone}
+        accessibilityLabel="C'est fait, saisir le résultat"
+        style={({ pressed }) => [styles.doneBtn, pressed && { opacity: 0.8 }]}>
+        <CircleCheck size={16} color={blood ? Palette.coralDeep : Palette.obsidian} />
+        <AppText variant="labelMd" color={blood ? Palette.coralDeep : Palette.obsidian}>
+          C&apos;est fait
+        </AppText>
+      </Pressable>
+    </Pressable>
   );
 }
 
@@ -668,4 +768,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   empty: { paddingVertical: 20, paddingHorizontal: 12 },
+  // Le carrousel déborde jusqu'aux bords de l'écran tout en restant aligné sur la marge
+  carouselBleed: { marginHorizontal: -Spacing.margin },
+  carousel: { paddingHorizontal: Spacing.margin, gap: 12, flexGrow: 1 },
+  plannedCard: { width: 250, minHeight: 170, borderRadius: 24, padding: 16, gap: 12 },
+  doneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+  },
 });

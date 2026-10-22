@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar } from 'react-native-calendars';
-import { CalendarDays, ChevronLeft, SlidersHorizontal, X, type LucideIcon } from 'lucide-react-native';
+import { CalendarClock, CalendarDays, ChevronLeft, Plus, SlidersHorizontal, X, type LucideIcon } from 'lucide-react-native';
 import { LabMarkerDefinition } from '../../types';
-import { Palette, Spacing, DockClearance, Radius, Type } from '../../constants/theme';
+import { Palette, Spacing, DockClearance, Radius, Type, Elevation } from '../../constants/theme';
 import { AppText, IconCircle, type BadgeTone } from '../ui';
 import { MONTHS, frDate, todayIso } from '../../lib/dates';
 import { LabStatus } from '../../lib/labStatus';
@@ -273,6 +274,40 @@ export function DateField({
   );
 }
 
+/** Hauteur du dock flottant (pilule de 48 px + padding). */
+const DOCK_HEIGHT = 58;
+
+/** Boutons flottants en bas à droite, au-dessus du dock : planifier (gris) et ajouter (« + »). */
+export function FloatingActions({
+  onAdd,
+  onPlan,
+  addLabel,
+}: {
+  onAdd: () => void;
+  onPlan: () => void;
+  addLabel: string;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View
+      pointerEvents="box-none"
+      style={[sharedStyles.fabs, { bottom: Math.max(insets.bottom, 12) + DOCK_HEIGHT + 16 }]}>
+      <Pressable
+        onPress={onPlan}
+        accessibilityLabel="Planifier"
+        style={({ pressed }) => [sharedStyles.fab, sharedStyles.fabGrey, pressed && { transform: [{ scale: 0.94 }] }]}>
+        <CalendarClock size={22} color={Palette.text} />
+      </Pressable>
+      <Pressable
+        onPress={onAdd}
+        accessibilityLabel={addLabel}
+        style={({ pressed }) => [sharedStyles.fab, sharedStyles.fabMain, pressed && { transform: [{ scale: 0.94 }] }]}>
+        <Plus size={26} color={Palette.obsidian} strokeWidth={2.6} />
+      </Pressable>
+    </View>
+  );
+}
+
 /** Bouton pointillé « + Ajouter … » en bas de liste. */
 export function AddRow({ label, icon: Icon, onPress }: { label: string; icon: LucideIcon; onPress: () => void }) {
   return (
@@ -298,6 +333,10 @@ export const sharedStyles = StyleSheet.create({
     alignSelf: 'center',
   },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  fabs: { position: 'absolute', right: Spacing.margin, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  fab: { alignItems: 'center', justifyContent: 'center', ...Elevation.floating },
+  fabGrey: { width: 52, height: 52, borderRadius: 26, backgroundColor: Palette.containerHighest },
+  fabMain: { width: 60, height: 60, borderRadius: 30, backgroundColor: Palette.lime },
   rowBetweenTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
   inlineLg: { flexDirection: 'row', alignItems: 'center', gap: 12, flexShrink: 1 },
   rowFields: { flexDirection: 'row', gap: 10 },

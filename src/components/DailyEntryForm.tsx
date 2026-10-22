@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Toast } from '../lib/toast';
+import { useInitialSyncing } from '../lib/syncEvent';
 import { View, StyleSheet, Pressable, TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import {
   Brain,
@@ -33,6 +34,7 @@ import {
   ToggleRow,
   inputStyle,
   type BadgeTone,
+  SkeletonCard,
 } from './ui';
 import { frDate, todayIso } from '../lib/dates';
 import {
@@ -98,6 +100,7 @@ function anxietyBadge(score: number | null): { label: string; tone: BadgeTone } 
 
 export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, onSaved, header }) => {
   const [loading, setLoading] = useState(true);
+  const initialSyncing = useInitialSyncing();
   const [saving, setSaving] = useState(false);
 
   const [anxietyScore, setAnxietyScore] = useState<number | null>(null);
@@ -227,12 +230,13 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
     }
   };
 
-  // Chargement asynchrone depuis le stockage à chaque changement de date
+  // Chargement asynchrone depuis le stockage à chaque changement de date, et à la fin de la synchro de connexion
   useEffect(() => {
+    if (initialSyncing) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]);
+  }, [selectedDate, initialSyncing]);
 
   const handleToggleMed = (index: number) => {
     setMedications((prev) => {
@@ -335,7 +339,16 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         showsVerticalScrollIndicator={false}>
         {header}
 
-        <View style={[styles.sections, loading && { opacity: 0.5 }]} pointerEvents={loading ? 'none' : 'auto'}>
+        {initialSyncing && (
+          <View style={styles.sections}>
+            <SkeletonCard lines={2} height={120} />
+            <SkeletonCard lines={3} height={160} />
+            <SkeletonCard lines={3} height={160} />
+          </View>
+        )}
+        <View
+          style={[styles.sections, loading && { opacity: 0.5 }, initialSyncing && { display: 'none' }]}
+          pointerEvents={loading ? 'none' : 'auto'}>
           {/* ── 0. Cycle menstruel (proposé seulement au bon moment) ── */}
           {cycleCardVisible && (
             <Card style={styles.section}>

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -23,7 +23,8 @@ import {
 import { Palette, Spacing, DockClearance, Radius, CategoryColors, Type, Elevation } from '../constants/theme';
 import { StorageService } from '../services/storageService';
 import { DailyLog, LabTest } from '../types';
-import { AppText, Badge, Card, Chip, IconCircle, PillButton, ScreenHeader } from '../components/ui';
+import { AppText, Badge, Card, Chip, IconCircle, PillButton, ScreenHeader, SkeletonCard } from '../components/ui';
+import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { todayIso, shiftIso, dayShort, dayNum, monthTitle, longDay, frDate } from '../lib/dates';
 import { flowLabel, getPeriods, hasMenstrualData, predictNextPeriod } from '../lib/cycle';
 import '../lib/calendarLocale';
@@ -77,6 +78,7 @@ export default function CalendarScreen() {
   const [category, setCategory] = useState<Category>('all');
   const [logs, setLogs] = useState<Record<string, DailyLog>>({});
   const [labTests, setLabTests] = useState<LabTest[]>([]);
+  const initialSyncing = useInitialSyncing();
 
   const loadData = useCallback(async () => {
     try {
@@ -92,6 +94,9 @@ export default function CalendarScreen() {
       loadData();
     }, [loadData])
   );
+
+  // Rafraîchi à la fin de chaque synchro cloud
+  useEffect(() => SyncEvent.subscribe(() => loadData()), [loadData]);
 
   const bloodByDate = new Map(labTests.map((t) => [t.date, t]));
   const selectedLog = logs[selectedDate];
@@ -251,7 +256,14 @@ export default function CalendarScreen() {
             </AppText>
           </View>
 
-          {!anyVisible && (
+          {initialSyncing && (
+            <>
+              <SkeletonCard lines={2} />
+              <SkeletonCard lines={2} />
+            </>
+          )}
+
+          {!initialSyncing && !anyVisible && (
             <Card style={styles.emptyCard}>
               <IconCircle icon={CalendarDays} size={48} />
               <AppText variant="bodyMd" color={Palette.textMuted} style={{ textAlign: 'center' }}>

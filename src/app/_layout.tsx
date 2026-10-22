@@ -18,9 +18,9 @@ import type { Session } from '@supabase/supabase-js';
 import { StorageService } from '../services/storageService';
 import { supabase, createSessionFromUrl } from '../lib/supabase';
 import { Toast } from '../lib/toast';
-import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
+import { todayIso } from '../lib/dates';
+import { SyncEvent } from '../lib/syncEvent';
 import LoginScreen from '../components/LoginScreen';
-import { DataLoading } from '../components/DataLoader';
 import { Palette, Elevation, Type } from '../constants/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -222,7 +222,6 @@ function AppRoot() {
   });
   // undefined = vérification en cours, null = pas de session, Session = connectée
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const initialSyncing = useInitialSyncing();
 
   useEffect(() => {
     let splashHidden = false;
@@ -263,6 +262,12 @@ function AppRoot() {
         try {
           const { synced } = await StorageService.syncFromCloud(newSession.user.id);
           if (synced > 0) console.log(`[Sync] ${synced} entrée(s) restaurée(s) depuis le cloud`);
+          try {
+            await StorageService.ensureAutoCheckups(todayIso());
+          } catch (e) {
+            console.error('[Sync] rendez-vous automatiques', e);
+            Toast.error('Impossible de planifier automatiquement les prises de sang');
+          }
         } catch {
           Toast.error('Connexion internet requise pour récupérer vos données');
         } finally {
@@ -332,11 +337,7 @@ function AppRoot() {
     return <LoginScreen />;
   }
 
-  // Connexion : on attend que le cache soit rempli depuis le cloud avant d'afficher les onglets
-  if (initialSyncing) {
-    return <DataLoading />;
-  }
-
+  // Pendant la synchro de connexion, les onglets s'affichent avec des squelettes (useInitialSyncing)
   return (
     <Tabs
       tabBar={(props) => <FloatingDock {...props} />}

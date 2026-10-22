@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
 import { View, StyleSheet, ScrollView, Alert, TextInput, Pressable, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
@@ -38,6 +39,7 @@ import {
   ScreenHeader,
   SectionHeader,
   Segmented,
+  Skeleton,
   Toggle,
   ToggleRow,
   inputStyle,
@@ -90,6 +92,10 @@ export default function SettingsScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
+
+  // Rafraîchi à la fin de chaque synchro cloud
+  useEffect(() => SyncEvent.subscribe(() => { loadAll(); }), [loadAll]);
+  const initialSyncing = useInitialSyncing();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null));
@@ -285,6 +291,13 @@ export default function SettingsScreen() {
             subtitle="Traitements de fond & cures ponctuelles"
           />
 
+          {initialSyncing && (
+            <View style={{ gap: 8 }}>
+              <Skeleton height={56} radius={20} />
+              <Skeleton height={56} radius={20} />
+            </View>
+          )}
+
           {fondPlans.length > 0 && (
             <View style={{ gap: 8 }}>
               <AppText variant="labelMd" color={Palette.textVariant}>Traitement de fond</AppText>
@@ -315,6 +328,13 @@ export default function SettingsScreen() {
             title="Traitements par défaut"
             subtitle="Dosages et liste pré-cochée chaque jour"
           />
+          {initialSyncing && (
+            <View style={{ gap: 8 }}>
+              <Skeleton height={52} radius={20} />
+              <Skeleton height={52} radius={20} />
+              <Skeleton height={52} radius={20} />
+            </View>
+          )}
           <View style={{ gap: 8 }}>
             {medications.map((med) => {
               const isEditing = editingMedId === med.id;
