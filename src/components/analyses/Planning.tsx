@@ -4,7 +4,7 @@ import { CalendarClock, Check, Pencil, Trash2, ClipboardCheck } from 'lucide-rea
 import * as Crypto from 'expo-crypto';
 import { CheckupKind, LabMarkerDefinition, PlannedCheckup } from '../../types';
 import { Palette } from '../../constants/theme';
-import { AppText, Card, Chip, IconCircle, PillButton, Segmented, inputStyle } from '../ui';
+import { AppText, Card, Chip, IconCircle, PillButton, inputStyle } from '../ui';
 import { daysBetween, frDate, todayIso } from '../../lib/dates';
 import { BottomSheet, DateField, Field, sharedStyles } from './shared';
 
@@ -17,7 +17,8 @@ export function checkupLabel(item: PlannedCheckup, markers: LabMarkerDefinition[
   return names.length ? names.join(', ') : 'Prise de sang';
 }
 
-/** À monter avec une `key` propre à chaque ouverture : l'état initial vient des props. */
+/** À monter avec une `key` propre à chaque ouverture : l'état initial vient des props.
+ * Le type est fixé à l'ouverture (`initialKind`, ou celui de la planification modifiée). */
 export function PlanningSheet({
   visible,
   onClose,
@@ -34,7 +35,7 @@ export function PlanningSheet({
   /** Doit lever une erreur si l'enregistrement échoue. */
   onSave: (item: PlannedCheckup) => Promise<void>;
 }) {
-  const [kind, setKind] = useState<CheckupKind>(editing?.kind ?? initialKind);
+  const kind = editing?.kind ?? initialKind;
   const [date, setDate] = useState(editing?.date ?? todayIso());
   const [codes, setCodes] = useState<string[]>(editing?.markerCodes ?? []);
   const [examLabel, setExamLabel] = useState(editing?.examLabel ?? '');
@@ -80,21 +81,10 @@ export function PlanningSheet({
       visible={visible}
       onClose={onClose}
       icon={CalendarClock}
-      title={editing ? 'Modifier la planification' : 'Planifier'}
-      subtitle="Prise de sang ou examen médical à venir">
-      {!editing && (
-        <Segmented
-          options={[
-            { id: 'blood', label: 'Prise de sang' },
-            { id: 'exam', label: 'Examen' },
-          ]}
-          value={kind}
-          onChange={(k) => {
-            setKind(k);
-            setError(null);
-          }}
-        />
-      )}
+      title={
+        editing ? 'Modifier la planification' : kind === 'blood' ? 'Planifier une prise de sang' : 'Planifier un examen'
+      }
+      subtitle={kind === 'blood' ? 'Prise de sang à venir' : 'Examen médical à venir'}>
       <DateField label="Date prévue" value={date} onChange={setDate} mode="future" />
       {kind === 'blood' ? (
         <Field label="Molécules à doser" error={error}>

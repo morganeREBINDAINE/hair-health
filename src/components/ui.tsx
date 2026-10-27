@@ -5,6 +5,7 @@ import {
   View,
   Text,
   Pressable,
+  ScrollView,
   StyleSheet,
   ActivityIndicator,
   type StyleProp,
@@ -430,20 +431,27 @@ export function Segmented<T extends string>({
   );
 }
 
-/** Barre d'onglets illustrés : vignette ronde + libellé, onglet actif sur fond noir. */
+/** Barre d'onglets illustrés : vignette ronde + libellé, onglet actif sur fond noir. Défile si trop large. */
 export function ImageTabBar<T extends string>({
   options,
   value,
   onChange,
   style,
+  contentContainerStyle,
 }: {
   options: { id: T; label: string; image: number }[];
   value: T;
   onChange: (v: T) => void;
   style?: StyleProp<ViewStyle>;
+  contentContainerStyle?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={[styles.imageTabs, style]} accessibilityRole="tablist">
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={style}
+      contentContainerStyle={[styles.imageTabs, contentContainerStyle]}
+      accessibilityRole="tablist">
       {options.map((o) => {
         const active = o.id === value;
         return (
@@ -458,16 +466,13 @@ export function ImageTabBar<T extends string>({
               pressed && !active && { opacity: 0.75 },
             ]}>
             <Image source={o.image} style={styles.imageTabThumb} contentFit="cover" transition={150} />
-            <Text
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              style={[Type.labelMd, { color: active ? '#FFFFFF' : Palette.textVariant }]}>
+            <Text numberOfLines={1} style={[Type.labelMd, { color: active ? '#FFFFFF' : Palette.textVariant }]}>
               {o.label}
             </Text>
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -604,18 +609,18 @@ const styles = StyleSheet.create({
   },
   segmentLg: { paddingHorizontal: 18, paddingVertical: 10 },
   segmentActive: { backgroundColor: Palette.obsidian },
-  imageTabs: { flexDirection: 'row', gap: 8 },
+  // Marge verticale : laisse de la place à l'ombre des cartes, sinon rognée par le ScrollView
+  imageTabs: { flexDirection: 'row', gap: 8, paddingVertical: 6 },
   imageTab: {
-    flex: 1,
     alignItems: 'center',
     gap: 6,
     paddingTop: 8,
     paddingBottom: 10,
-    paddingHorizontal: 4,
+    paddingHorizontal: 18,
     borderRadius: Radius.lg,
     backgroundColor: Palette.card,
     ...Elevation.card,
   },
   imageTabActive: { backgroundColor: Palette.obsidian, ...Elevation.dark },
-  imageTabThumb: { width: '82%', aspectRatio: 1, maxWidth: 72, borderRadius: Radius.full },
+  imageTabThumb: { width: 64, height: 64, borderRadius: Radius.full },
 });

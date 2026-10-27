@@ -6,8 +6,9 @@ import { StorageService } from '../services/storageService';
 import { Toast } from '../lib/toast';
 import { actionError } from '../lib/errors';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
-import { CalendarClock, Plus } from 'lucide-react-native';
-import { Palette, Spacing } from '../constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CalendarClock } from 'lucide-react-native';
+import { DockClearance, Elevation, Palette, Spacing } from '../constants/theme';
 import { AppText, ImageTabBar, PillButton, ScreenHeader, SkeletonCard } from '../components/ui';
 import { sharedStyles } from '../components/analyses/shared';
 import { MoleculesTab } from '../components/analyses/MoleculesTab';
@@ -22,17 +23,21 @@ type AnalysesTab = 'molecules' | 'tests' | 'exams' | 'planned';
 
 const TAB_OPTIONS: { id: AnalysesTab; label: string; image: number }[] = [
   { id: 'molecules', label: 'Molécules', image: require('../../assets/images/analyses/molecules.jpg') },
-  { id: 'tests', label: 'Sang', image: require('../../assets/images/analyses/blood.jpg') },
+  { id: 'tests', label: 'Prises de sang', image: require('../../assets/images/analyses/blood.jpg') },
   { id: 'exams', label: 'Examens', image: require('../../assets/images/analyses/exams.jpg') },
   { id: 'planned', label: 'Planifiés', image: require('../../assets/images/analyses/planned.jpg') },
 ];
 const TABS = TAB_OPTIONS.map((t) => t.id);
+
+/** Hauteur du dock de navigation flottant (bouton 48 + padding 2 × 5), voir `_layout.tsx`. */
+const DOCK_HEIGHT = 58;
 
 /** Formulaire ouvert : `session` sert de `key` pour repartir d'un état vierge à chaque ouverture. */
 type SheetState<T> = { session: number; editing: T | null; fromPlan: PlannedCheckup | null };
 
 export default function AnalysesScreen() {
   const params = useLocalSearchParams<{ tab?: string }>();
+  const insets = useSafeAreaInsets();
   const initialSyncing = useInitialSyncing();
   const [activeTab, setActiveTab] = useState<AnalysesTab>('molecules');
   const [markers, setMarkers] = useState<LabMarkerDefinition[]>([]);
@@ -127,49 +132,45 @@ export default function AnalysesScreen() {
   };
 
   const pending = checkups.filter((c) => !c.done);
+  const hasFab = activeTab === 'tests' || activeTab === 'exams';
 
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Analyses" />
       {/* Onglets et actions fixes : seule la liste défile */}
       <View style={styles.fixedBar}>
-        <ImageTabBar options={TAB_OPTIONS} value={activeTab} onChange={setActiveTab} />
-        {(activeTab === 'tests' || activeTab === 'exams') && (
-          // Sur les écrans étroits, « Planifier » passe sous le bouton d'ajout plutôt que de tronquer le texte
+        {/* Défilement bord à bord : on annule la marge latérale de la barre */}
+        <ImageTabBar
+          options={TAB_OPTIONS}
+          value={activeTab}
+          onChange={setActiveTab}
+          style={styles.tabsBleed}
+          contentContainerStyle={styles.tabsContent}
+        />
+        {activeTab === 'planned' && (
+          // Sur les écrans étroits, le second bouton passe en dessous plutôt que de tronquer le texte
           <View style={styles.actions}>
             <PillButton
-              label={activeTab === 'tests' ? 'Ajouter une prise de sang' : 'Ajouter un examen'}
-              icon={Plus}
-              variant="lime"
+              label="Planifier prise de sang"
+              icon={CalendarClock}
               compact
               disabled={loading}
-              onPress={() => (activeTab === 'tests' ? openBlood(null) : openExam(null))}
+              onPress={() => openPlan('blood')}
               style={{ flexGrow: 1 }}
             />
             <PillButton
-              label="Planifier"
+              label="Planifier examen"
               icon={CalendarClock}
-              variant="ghost"
               compact
               disabled={loading}
-              onPress={() => openPlan(activeTab === 'tests' ? 'blood' : 'exam')}
+              onPress={() => openPlan('exam')}
               style={{ flexGrow: 1 }}
             />
           </View>
         )}
-        {activeTab === 'planned' && (
-          <PillButton
-            label="Planifier"
-            icon={CalendarClock}
-            variant="lime"
-            compact
-            disabled={loading}
-            onPress={() => openPlan('blood')}
-          />
-        )}
       </View>
       <ScrollView
-        contentContainerStyle={sharedStyles.content}
+        contentContainerStyle={[sharedStyles.content, hasFab && styles.contentWithFab]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
         {activeTab === 'molecules' && (
@@ -216,6 +217,16 @@ export default function AnalysesScreen() {
           />
         )}
       </ScrollView>
+
+      {hasFab && (
+        <PillButton
+          label={activeTab === 'tests' ? 'Ajouter une prise de sang' : 'Ajouter un examen'}
+          variant="lime"
+          disabled={loading}
+          onPress={() => (activeTab === 'tests' ? openBlood(null) : openExam(null))}
+          style={[styles.fab, { bottom: Math.max(insets.bottom, 12) + DOCK_HEIGHT + 14 }]}
+        />
+      )}
 
       {bloodSheet && (
         <BloodTestSheet
@@ -266,5 +277,10 @@ const styles = StyleSheet.create({
     maxWidth: 640,
     alignSelf: 'center',
   },
+  tabsBleed: { marginHorizontal: -Spacing.margin },
+  tabsContent: { paddingHorizontal: Spacing.margin },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  // Le bouton flottant ne doit pas masquer la dernière carte
+  contentWithFab: { paddingBottom: DockClearance + 64 },
+  fab: { position: 'absolute', right: Spacing.margin, ...Elevation.floating },
 });
