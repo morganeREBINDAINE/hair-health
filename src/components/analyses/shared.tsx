@@ -1,5 +1,16 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
+  Easing,
+  Dimensions,
+} from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { CalendarDays, ChevronLeft, SlidersHorizontal, X, type LucideIcon } from 'lucide-react-native';
 import { LabMarkerDefinition } from '../../types';
@@ -92,11 +103,25 @@ export function BottomSheet({
   icon?: LucideIcon;
   children: React.ReactNode;
 }) {
+  // Animations séparées : le fond sombre apparaît en fondu, seule la fiche glisse depuis le bas
+  const [backdrop] = useState(() => new Animated.Value(0));
+  const [slide] = useState(() => new Animated.Value(Dimensions.get('window').height));
+
+  useEffect(() => {
+    if (!visible) return;
+    Animated.parallel([
+      Animated.timing(backdrop, { toValue: 1, duration: 120, useNativeDriver: true }),
+      Animated.timing(slide, { toValue: 0, duration: 250, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+    ]).start();
+  }, [visible, backdrop, slide]);
+
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
       <KeyboardAvoidingView style={sharedStyles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={sharedStyles.sheet}>
+        <Animated.View style={[StyleSheet.absoluteFill, sharedStyles.backdrop, { opacity: backdrop }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        </Animated.View>
+        <Animated.View style={[sharedStyles.sheet, { transform: [{ translateY: slide }] }]}>
           <View style={sharedStyles.grabber} />
           <View style={sharedStyles.rowBetween}>
             <View style={sharedStyles.inlineLg}>
@@ -117,7 +142,7 @@ export function BottomSheet({
           <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
             {children}
           </ScrollView>
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -362,7 +387,8 @@ export const sharedStyles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
   },
-  overlay: { flex: 1, backgroundColor: 'rgba(18,22,20,0.45)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { backgroundColor: 'rgba(18,22,20,0.45)' },
   sheet: {
     backgroundColor: Palette.surface,
     borderTopLeftRadius: Radius.xxl,

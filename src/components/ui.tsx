@@ -265,7 +265,7 @@ export function PillButton({
       ) : (
         <>
           {Icon && <Icon size={compact ? 16 : 19} color={palette.fg} />}
-          <Text style={[compact ? Type.labelMd : styles.pillBtnText, { color: palette.fg }]}>{label}</Text>
+          <Text style={[compact ? Type.labelMd : styles.pillBtnText, styles.pillBtnLabel, { color: palette.fg }]}>{label}</Text>
         </>
       )}
     </Pressable>
@@ -542,6 +542,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
+  // Le libellé peut passer à la ligne si le bouton est contraint en largeur
+  pillBtnLabel: { flexShrink: 1, textAlign: 'center' },
   pillBtnCompact: { height: 40, paddingHorizontal: 16, gap: 6 },
   pillBtnText: { fontFamily: FontFamily.display, fontSize: 15, letterSpacing: -0.2 },
   chip: {

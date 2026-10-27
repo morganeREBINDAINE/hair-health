@@ -148,7 +148,7 @@ export default function AnalysesScreen() {
           contentContainerStyle={styles.tabsContent}
         />
         {activeTab === 'planned' && (
-          // Sur les écrans étroits, le second bouton passe en dessous plutôt que de tronquer le texte
+          // Côte à côte : le libellé passe sur deux lignes plutôt que d'être tronqué
           <View style={styles.actions}>
             <PillButton
               label="Planifier prise de sang"
@@ -156,15 +156,16 @@ export default function AnalysesScreen() {
               compact
               disabled={loading}
               onPress={() => openPlan('blood')}
-              style={{ flexGrow: 1 }}
+              style={styles.planBtn}
             />
             <PillButton
               label="Planifier examen"
               icon={CalendarClock}
+              variant="ghost"
               compact
               disabled={loading}
               onPress={() => openPlan('exam')}
-              style={{ flexGrow: 1 }}
+              style={styles.planBtn}
             />
           </View>
         )}
@@ -279,8 +280,9 @@ const styles = StyleSheet.create({
   },
   tabsBleed: { marginHorizontal: -Spacing.margin },
   tabsContent: { paddingHorizontal: Spacing.margin },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  actions: { flexDirection: 'row', gap: 10 },
+  planBtn: { flex: 1, height: 'auto', minHeight: 48, paddingVertical: 8, paddingHorizontal: 14 },
   // Le bouton flottant ne doit pas masquer la dernière carte
   contentWithFab: { paddingBottom: DockClearance + 64 },
-  fab: { position: 'absolute', right: Spacing.margin, ...Elevation.floating },
+  fab: { position: 'absolute', right: Spacing.margin, height: 62, paddingHorizontal: 28, ...Elevation.floating },
 });
