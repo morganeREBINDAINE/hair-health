@@ -354,9 +354,7 @@ export default function DashboardScreen() {
                   label={checkupLabel(c, labMarkers)}
                   today={todayStr}
                   single={upcoming.length === 1}
-                  onOpen={() =>
-                    router.push({ pathname: '/analyses', params: { tab: c.kind === 'blood' ? 'tests' : 'exams' } })
-                  }
+                  onOpen={() => router.push({ pathname: '/analyses', params: { tab: 'planned' } })}
                   onDone={() => openCompletion(c)}
                 />
               ))}

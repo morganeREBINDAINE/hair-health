@@ -6,9 +6,8 @@ import { statusOf } from '../../lib/labStatus';
 import { Toast } from '../../lib/toast';
 import { actionError } from '../../lib/errors';
 import { StorageService } from '../../services/storageService';
-import { LabMarkerDefinition, LabTest, PlannedCheckup } from '../../types';
+import { LabMarkerDefinition, LabTest } from '../../types';
 import { AppText, Badge, Card, IconCircle, SkeletonCard } from '../ui';
-import { PlannedSection } from './Planning';
 import { STATUS_BADGE, sharedStyles } from './shared';
 
 export function BloodTestsTab({
@@ -16,21 +15,13 @@ export function BloodTestsTab({
   markers,
   labTests,
   onLabTestsChange,
-  planned,
   onEditTest,
-  onCompletePlan,
-  onEditPlan,
-  onDeletePlan,
 }: {
   loading: boolean;
   markers: LabMarkerDefinition[];
   labTests: LabTest[];
   onLabTestsChange: (tests: LabTest[]) => void;
-  planned: PlannedCheckup[];
   onEditTest: (test: LabTest) => void;
-  onCompletePlan: (item: PlannedCheckup) => void;
-  onEditPlan: (item: PlannedCheckup) => void;
-  onDeletePlan: (item: PlannedCheckup) => void;
 }) {
   if (loading) {
     return (
@@ -65,14 +56,6 @@ export function BloodTestsTab({
 
   return (
     <>
-      <PlannedSection
-        items={planned}
-        markers={markers}
-        onComplete={onCompletePlan}
-        onEdit={onEditPlan}
-        onDelete={onDeletePlan}
-      />
-
       {testsDesc.length === 0 ? (
         <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 32 }}>
           <IconCircle icon={Syringe} size={52} />

@@ -8,17 +8,25 @@ import { actionError } from '../lib/errors';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { CalendarClock, Plus } from 'lucide-react-native';
 import { Palette, Spacing } from '../constants/theme';
-import { AppText, PillButton, ScreenHeader, Segmented, SkeletonCard } from '../components/ui';
+import { AppText, ImageTabBar, PillButton, ScreenHeader, SkeletonCard } from '../components/ui';
 import { sharedStyles } from '../components/analyses/shared';
 import { MoleculesTab } from '../components/analyses/MoleculesTab';
 import { BloodTestsTab } from '../components/analyses/BloodTestsTab';
 import { ExamsTab } from '../components/analyses/ExamsTab';
+import { PlannedTab } from '../components/analyses/PlannedTab';
 import { BloodTestSheet } from '../components/analyses/BloodTestSheet';
 import { ExamSheet } from '../components/analyses/ExamSheet';
 import { PlanningSheet, checkupLabel } from '../components/analyses/Planning';
 
-type AnalysesTab = 'molecules' | 'tests' | 'exams';
-const TABS: AnalysesTab[] = ['molecules', 'tests', 'exams'];
+type AnalysesTab = 'molecules' | 'tests' | 'exams' | 'planned';
+
+const TAB_OPTIONS: { id: AnalysesTab; label: string; image: number }[] = [
+  { id: 'molecules', label: 'Molécules', image: require('../../assets/images/analyses/molecules.jpg') },
+  { id: 'tests', label: 'Sang', image: require('../../assets/images/analyses/blood.jpg') },
+  { id: 'exams', label: 'Examens', image: require('../../assets/images/analyses/exams.jpg') },
+  { id: 'planned', label: 'Planifiés', image: require('../../assets/images/analyses/planned.jpg') },
+];
+const TABS = TAB_OPTIONS.map((t) => t.id);
 
 /** Formulaire ouvert : `session` sert de `key` pour repartir d'un état vierge à chaque ouverture. */
 type SheetState<T> = { session: number; editing: T | null; fromPlan: PlannedCheckup | null };
@@ -118,24 +126,15 @@ export default function AnalysesScreen() {
     ]);
   };
 
-  const pending = (kind: CheckupKind) => checkups.filter((c) => c.kind === kind && !c.done);
-  const hasActions = activeTab !== 'molecules';
+  const pending = checkups.filter((c) => !c.done);
 
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Analyses" />
       {/* Onglets et actions fixes : seule la liste défile */}
       <View style={styles.fixedBar}>
-        <Segmented
-          options={[
-            { id: 'molecules', label: 'Molécules' },
-            { id: 'tests', label: loading ? 'Prises de sang' : `Prises de sang (${labTests.length})` },
-            { id: 'exams', label: loading ? 'Examens' : `Examens (${exams.length})` },
-          ]}
-          value={activeTab}
-          onChange={setActiveTab}
-        />
-        {hasActions && (
+        <ImageTabBar options={TAB_OPTIONS} value={activeTab} onChange={setActiveTab} />
+        {(activeTab === 'tests' || activeTab === 'exams') && (
           // Sur les écrans étroits, « Planifier » passe sous le bouton d'ajout plutôt que de tronquer le texte
           <View style={styles.actions}>
             <PillButton
@@ -157,6 +156,16 @@ export default function AnalysesScreen() {
               style={{ flexGrow: 1 }}
             />
           </View>
+        )}
+        {activeTab === 'planned' && (
+          <PillButton
+            label="Planifier"
+            icon={CalendarClock}
+            variant="lime"
+            compact
+            disabled={loading}
+            onPress={() => openPlan('blood')}
+          />
         )}
       </View>
       <ScrollView
@@ -185,11 +194,7 @@ export default function AnalysesScreen() {
             markers={markers}
             labTests={labTests}
             onLabTestsChange={setLabTests}
-            planned={pending('blood')}
             onEditTest={(t) => openBlood(t)}
-            onCompletePlan={completePlan}
-            onEditPlan={(item) => openPlan(item.kind, item)}
-            onDeletePlan={deletePlan}
           />
         )}
         {activeTab === 'exams' && (
@@ -197,12 +202,17 @@ export default function AnalysesScreen() {
             loading={loading}
             exams={exams}
             onExamsChange={setExams}
-            markers={markers}
-            planned={pending('exam')}
             onEditExam={(e) => openExam(e)}
-            onCompletePlan={completePlan}
-            onEditPlan={(item) => openPlan(item.kind, item)}
-            onDeletePlan={deletePlan}
+          />
+        )}
+        {activeTab === 'planned' && (
+          <PlannedTab
+            loading={loading}
+            planned={pending}
+            markers={markers}
+            onComplete={completePlan}
+            onEdit={(item) => openPlan(item.kind, item)}
+            onDelete={deletePlan}
           />
         )}
       </ScrollView>

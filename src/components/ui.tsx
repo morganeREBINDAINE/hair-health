@@ -430,6 +430,47 @@ export function Segmented<T extends string>({
   );
 }
 
+/** Barre d'onglets illustrés : vignette ronde + libellé, onglet actif sur fond noir. */
+export function ImageTabBar<T extends string>({
+  options,
+  value,
+  onChange,
+  style,
+}: {
+  options: { id: T; label: string; image: number }[];
+  value: T;
+  onChange: (v: T) => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.imageTabs, style]} accessibilityRole="tablist">
+      {options.map((o) => {
+        const active = o.id === value;
+        return (
+          <Pressable
+            key={o.id}
+            onPress={() => onChange(o.id)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: active }}
+            style={({ pressed }) => [
+              styles.imageTab,
+              active && styles.imageTabActive,
+              pressed && !active && { opacity: 0.75 },
+            ]}>
+            <Image source={o.image} style={styles.imageTabThumb} contentFit="cover" transition={150} />
+            <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={[Type.labelMd, { color: active ? '#FFFFFF' : Palette.textVariant }]}>
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export const inputStyle: TextStyle = {
   height: 52,
   borderRadius: Radius.full,
@@ -563,4 +604,18 @@ const styles = StyleSheet.create({
   },
   segmentLg: { paddingHorizontal: 18, paddingVertical: 10 },
   segmentActive: { backgroundColor: Palette.obsidian },
+  imageTabs: { flexDirection: 'row', gap: 8 },
+  imageTab: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 8,
+    paddingBottom: 10,
+    paddingHorizontal: 4,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.card,
+    ...Elevation.card,
+  },
+  imageTabActive: { backgroundColor: Palette.obsidian, ...Elevation.dark },
+  imageTabThumb: { width: '82%', aspectRatio: 1, maxWidth: 72, borderRadius: Radius.full },
 });

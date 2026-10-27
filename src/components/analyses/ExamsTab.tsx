@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Pressable, Alert, Modal, StyleSheet, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { MapPin, Pencil, ScanLine, Trash2 } from 'lucide-react-native';
-import { LabMarkerDefinition, MedicalExam, MedicalExamType, PlannedCheckup } from '../../types';
+import { MedicalExam, MedicalExamType } from '../../types';
 import { StorageService } from '../../services/storageService';
 import { Palette } from '../../constants/theme';
 import { AppText, Badge, Card, IconCircle, SkeletonCard } from '../ui';
@@ -10,7 +10,6 @@ import { frDate } from '../../lib/dates';
 import { Toast } from '../../lib/toast';
 import { actionError } from '../../lib/errors';
 import { sharedStyles } from './shared';
-import { PlannedSection } from './Planning';
 import { ExamPhoto } from './ExamPhoto';
 
 const TYPE_LABEL: Record<MedicalExamType, string> = { radio: 'Radio', echographie: 'Échographie' };
@@ -19,22 +18,12 @@ export function ExamsTab({
   loading,
   exams,
   onExamsChange,
-  markers,
-  planned,
   onEditExam,
-  onCompletePlan,
-  onEditPlan,
-  onDeletePlan,
 }: {
   loading: boolean;
   exams: MedicalExam[];
   onExamsChange: (exams: MedicalExam[]) => void;
-  markers: LabMarkerDefinition[];
-  planned: PlannedCheckup[];
   onEditExam: (exam: MedicalExam) => void;
-  onCompletePlan: (item: PlannedCheckup) => void;
-  onEditPlan: (item: PlannedCheckup) => void;
-  onDeletePlan: (item: PlannedCheckup) => void;
 }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
@@ -71,14 +60,6 @@ export function ExamsTab({
 
   return (
     <>
-      <PlannedSection
-        items={planned}
-        markers={markers}
-        onComplete={onCompletePlan}
-        onEdit={onEditPlan}
-        onDelete={onDeletePlan}
-      />
-
       {exams.length === 0 ? (
         <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 32 }}>
           <IconCircle icon={ScanLine} size={52} />
