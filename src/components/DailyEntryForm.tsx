@@ -1,42 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { Toast } from '../lib/toast';
-import { useInitialSyncing } from '../lib/syncEvent';
-import { View, StyleSheet, Pressable, TextInput, ScrollView, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import {
   Brain,
-  Wind,
-  HeartCrack,
-  Pill,
   Check,
-  CirclePlus,
-  Sparkles,
-  ShowerHead,
-  Leaf,
-  Scissors,
-  Moon,
-  Droplets,
-  Droplet,
-  Clock,
   CircleCheck,
+  CirclePlus,
+  Clock,
+  Droplet,
+  Droplets,
+  HeartCrack,
+  Leaf,
+  Moon,
+  NotebookPen,
+  Pill,
+  Scissors,
+  ShowerHead,
+  Sparkles,
+  Wind,
 } from 'lucide-react-native';
-import { CycleStatus, DailyLog, DailyMedicationItem, FatigueLevel, MedicationDefinition, ShampooType, TreatmentPlan } from '../types';
-import { StorageService } from '../services/storageService';
-import { Palette, Spacing, DockClearance, Radius, Type } from '../constants/theme';
-import {
-  AppText,
-  Badge,
-  Card,
-  Chip,
-  PillButton,
-  SectionHeader,
-  Segmented,
-  Toggle,
-  ToggleRow,
-  inputStyle,
-  type BadgeTone,
-  SkeletonCard,
-} from './ui';
-import { frDate, todayIso } from '../lib/dates';
+import React, { useEffect, useState } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { DockClearance, Palette, Radius, Spacing, Type } from '../constants/theme';
 import {
   NOTE_MAX_LENGTH,
   flowLabel,
@@ -45,6 +27,25 @@ import {
   normalizeTime,
   shouldShowCycleCard,
 } from '../lib/cycle';
+import { frDate, todayIso } from '../lib/dates';
+import { useInitialSyncing } from '../lib/syncEvent';
+import { Toast } from '../lib/toast';
+import { StorageService } from '../services/storageService';
+import { CycleStatus, DailyLog, DailyMedicationItem, FatigueLevel, MedicationDefinition, ShampooType } from '../types';
+import {
+  AppText,
+  Badge,
+  Card,
+  Chip,
+  PillButton,
+  SectionHeader,
+  Segmented,
+  SkeletonCard,
+  Toggle,
+  ToggleRow,
+  inputStyle,
+  type BadgeTone,
+} from './ui';
 
 interface DailyEntryFormProps {
   selectedDate: string;
@@ -69,8 +70,8 @@ const FATIGUE_OPTIONS: { id: FatigueLevel; label: string }[] = [
 
 
 const SLEEP_QUICK: number[] = [5, 6, 7, 8, 9];
-
 const CONFLICT_NOTE_MAX_LENGTH = 500;
+
 const currentTime = () => {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -107,14 +108,17 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
   const [anxietyScore, setAnxietyScore] = useState<number | null>(null);
   const [lumpInThroat, setLumpInThroat] = useState(false);
   const [conflictWithHusband, setConflictWithHusband] = useState(false);
-
   const [conflictNote, setConflictNote] = useState('');
+
   const [hairLossAmount, setHairLossAmount] = useState<string>('');
   const [haircutDone, setHaircutDone] = useState(false);
   const [haircutNotes, setHaircutNotes] = useState('');
   const [hairWashDone, setHairWashDone] = useState(false);
   const [shampooType, setShampooType] = useState<ShampooType | null>(null);
   const [hennaDone, setHennaDone] = useState(false);
+
+  const [hasNote, setHasNote] = useState(false);
+  const [note, setNote] = useState('');
 
   const [sleepHours, setSleepHours] = useState<string>('');
   const [fatigueLevel, setFatigueLevel] = useState<FatigueLevel | null>(null);
@@ -194,17 +198,19 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         setAnxietyScore(existingLog.anxietyScore);
         setLumpInThroat(existingLog.lumpInThroat);
         setConflictWithHusband(existingLog.conflictWithHusband);
+        setConflictNote(existingLog.conflictNote ?? '');
         setHairLossAmount(existingLog.hairLossAmount !== null ? String(existingLog.hairLossAmount) : '');
         setHaircutDone(existingLog.haircutDone);
         setHaircutNotes(existingLog.haircutNotes || '');
         setHairWashDone(existingLog.hairWashDone);
-        setConflictNote(existingLog.conflictNote ?? '');
         setShampooType(existingLog.shampooType);
         setHennaDone(existingLog.hennaDone);
         setSleepHours(
           existingLog.sleepHours !== null && existingLog.sleepHours !== undefined ? String(existingLog.sleepHours) : ''
         );
         setFatigueLevel(existingLog.fatigueLevel ?? null);
+        setNote(existingLog.notes ?? '');
+        setHasNote(!!existingLog.notes?.trim());
 
         const medMap = new Map(existingLog.medications.map((m) => [m.name, m]));
         const mergedMeds: DailyMedicationItem[] = defs.map((def) => {
@@ -216,15 +222,17 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         setAnxietyScore(null);
         setLumpInThroat(false);
         setConflictWithHusband(false);
+        setConflictNote('');
         setHairLossAmount('');
         setHaircutDone(false);
         setHaircutNotes('');
         setHairWashDone(false);
         setShampooType(null);
         setHennaDone(false);
-        setConflictNote('');
         setSleepHours('');
         setFatigueLevel(null);
+        setNote('');
+        setHasNote(false);
         setMedications(defs.map((def) => ({ name: def.name, taken: def.isPrechecked, dosage: def.defaultDosage })));
       }
     } catch (e) {
@@ -288,6 +296,12 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
   }
   const hasCycleErrors = Object.keys(cycleErrors).length > 0;
 
+  const conflictNoteError =
+    conflictWithHusband && conflictNote.length > CONFLICT_NOTE_MAX_LENGTH
+      ? `La description ne doit pas dépasser ${CONFLICT_NOTE_MAX_LENGTH} caractères.`
+      : undefined;
+  const hasFormErrors = hasCycleErrors || !!conflictNoteError;
+
   const handleDeclarePeriod = () => {
     setCycleCardVisible(true);
     setPeriodToday(true);
@@ -296,12 +310,6 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
   const handleSave = async () => {
     if (hasFormErrors) return;
     setSaving(true);
-  const conflictNoteError =
-    conflictWithHusband && conflictNote.length > CONFLICT_NOTE_MAX_LENGTH
-      ? `La description ne doit pas dépasser ${CONFLICT_NOTE_MAX_LENGTH} caractères.`
-      : undefined;
-  const hasFormErrors = hasCycleErrors || !!conflictNoteError;
-
     try {
       const parsedHairLoss = hairLossAmount.trim() === '' ? null : parseInt(hairLossAmount, 10);
       const parsedSleep = sleepHours.trim() === '' ? null : parseFloat(sleepHours.replace(',', '.'));
@@ -311,6 +319,8 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         anxietyScore,
         lumpInThroat,
         conflictWithHusband,
+        // Dispute décochée : la description est effacée
+        conflictNote: conflictWithHusband ? conflictNote.trim() : '',
         hairLossAmount: isNaN(parsedHairLoss as number) ? null : parsedHairLoss,
         haircutDone,
         haircutNotes,
@@ -319,8 +329,8 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         hennaDone,
         sleepHours: isNaN(parsedSleep as number) ? null : parsedSleep,
         fatigueLevel,
-        // Dispute décochée : la description est effacée
-        conflictNote: conflictWithHusband ? conflictNote.trim() : '',
+        // Case décochée : la note est effacée
+        notes: hasNote ? note.trim() : '',
         medications,
         menstrualFlow: cycleCardVisible && periodToday ? flow : null,
         menstrualPain: cycleCardVisible && periodToday ? pain : null,
@@ -539,16 +549,6 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
               activeColor={Palette.coralDeep}
               activeBg={Palette.coralSoft}
             />
-          </Card>
-
-          {/* ── 2. Sommeil & fatigue ── */}
-          <Card style={styles.section}>
-            <SectionHeader
-              icon={Moon}
-              title="Sommeil & fatigue"
-              subtitle="Nuit dernière et état au réveil"
-              right={sleepHours ? <Badge label={`${sleepHours} h`} tone="neutral" /> : undefined}
-            />
             {conflictWithHusband && (
               <View style={{ gap: 6 }}>
                 <TextInput
@@ -569,6 +569,16 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
                 </View>
               </View>
             )}
+          </Card>
+
+          {/* ── 2. Sommeil & fatigue ── */}
+          <Card style={styles.section}>
+            <SectionHeader
+              icon={Moon}
+              title="Sommeil & fatigue"
+              subtitle="Nuit dernière et état au réveil"
+              right={sleepHours ? <Badge label={`${sleepHours} h`} tone="neutral" /> : undefined}
+            />
             <View style={{ gap: 10 }}>
               <AppText variant="labelMd">Heures de sommeil</AppText>
               <View style={styles.wrap}>
@@ -696,7 +706,7 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
               iconBg={Palette.limeSoft}
               iconColor={Palette.primary}
               title="Cheveux & soins"
-              subtitle="Suivi de la vitalité capillaire"
+              subtitle="Suivi de la santé"
             />
 
             <View style={{ gap: 10 }}>
@@ -762,6 +772,33 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
             </View>
           </Card>
 
+          {/* ── 5. Note du jour ── */}
+          <Card style={styles.section}>
+            <SectionHeader
+              icon={NotebookPen}
+              iconBg={Palette.limeSoft}
+              iconColor={Palette.primary}
+              title="Note du jour"
+              subtitle="Facultatif"
+            />
+            <Pressable style={styles.medLeft} onPress={() => setHasNote((v) => !v)} hitSlop={4}>
+              <View style={[styles.checkbox, hasNote && styles.checkboxActive]}>
+                {hasNote && <Check size={14} color={Palette.onLime} strokeWidth={3} />}
+              </View>
+              <AppText variant="labelMd">Ajouter une note</AppText>
+            </Pressable>
+            {hasNote && (
+              <TextInput
+                style={[inputStyle, styles.noteInput]}
+                value={note}
+                onChangeText={setNote}
+                placeholder="Ce que tu veux retenir de cette journée…"
+                placeholderTextColor={Palette.textMuted}
+                multiline
+              />
+            )}
+          </Card>
+
           {!cycleCardVisible && (
             <PillButton
               label="Mes règles ont commencé"
@@ -783,6 +820,11 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
             {hasCycleErrors && (
               <AppText variant="bodySm" color={Palette.error} style={{ textAlign: 'center' }}>
                 Corrige la carte « Cycle menstruel » pour enregistrer.
+              </AppText>
+            )}
+            {conflictNoteError && (
+              <AppText variant="bodySm" color={Palette.error} style={{ textAlign: 'center' }}>
+                Raccourcis la description de la dispute pour enregistrer.
               </AppText>
             )}
             <AppText variant="bodySm" color={Palette.textMuted} style={{ textAlign: 'center' }}>
@@ -822,11 +864,6 @@ const styles = StyleSheet.create({
   scale: { flexDirection: 'row', justifyContent: 'space-between', gap: 3 },
   scaleBtn: {
     flex: 1,
-            {conflictNoteError && (
-              <AppText variant="bodySm" color={Palette.error} style={{ textAlign: 'center' }}>
-                Raccourcis la description de la dispute pour enregistrer.
-              </AppText>
-            )}
     height: 42,
     maxWidth: 40,
     borderRadius: Radius.full,
