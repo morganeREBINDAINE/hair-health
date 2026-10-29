@@ -50,6 +50,8 @@ export const Palette = {
   // Cycle menstruel
   raspberry: '#B83568',
   raspberrySoft: '#FBE3EC',
+  menstrual: '#D32F2F',
+  menstrualDeep: '#9A1B1B',
 
   error: '#BA1A1A',
 } as const;

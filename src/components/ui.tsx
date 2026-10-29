@@ -1,21 +1,21 @@
+import { Image } from 'expo-image';
+import { ChevronDown, ChevronUp, UserRound, type LucideIcon } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Easing,
-  View,
-  Text,
   Pressable,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
+  Text,
+  View,
   type StyleProp,
-  type ViewStyle,
   type TextStyle,
+  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
-import { UserRound, type LucideIcon } from 'lucide-react-native';
-import { Palette, Radius, Elevation, Type, FontFamily, Spacing } from '../constants/theme';
+import { Elevation, FontFamily, Palette, Radius, Spacing, Type } from '../constants/theme';
 
 // ─── Typographie ────────────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ export function AppText({
 
 export function ScreenHeader({
   title,
-  eyebrow = 'Vitalité Capillaire',
+  eyebrow = 'Santé Hijra',
   right,
 }: {
   title: string;
@@ -310,6 +310,29 @@ export function Chip({
   );
 }
 
+// ─── Voir plus / Voir moins ─────────────────────────────────────────────────
+
+/** Bouton qui déplie ou replie une liste tronquée ; `hiddenCount` = éléments masqués. */
+export function ShowMoreToggle({
+  expanded,
+  hiddenCount,
+  onToggle,
+}: {
+  expanded: boolean;
+  hiddenCount: number;
+  onToggle: () => void;
+}) {
+  const Icon = expanded ? ChevronUp : ChevronDown;
+  return (
+    <Pressable onPress={onToggle} hitSlop={8} style={({ pressed }) => [styles.showMore, pressed && { opacity: 0.6 }]}>
+      <Text style={[Type.labelMd, { color: Palette.primary }]}>
+        {expanded ? 'Voir moins' : `Voir plus (${hiddenCount})`}
+      </Text>
+      <Icon size={16} color={Palette.primary} />
+    </Pressable>
+  );
+}
+
 // ─── Interrupteur pilule ────────────────────────────────────────────────────
 
 export function Toggle({ value, onValueChange }: { value: boolean; onValueChange: (v: boolean) => void }) {
@@ -556,6 +579,13 @@ const styles = StyleSheet.create({
   },
   chipIdle: { backgroundColor: Palette.card, ...Elevation.card, elevation: 1 },
   chipSelected: { backgroundColor: Palette.obsidian },
+  showMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 6,
+  },
   chipCount: {
     minWidth: 20,
     height: 20,

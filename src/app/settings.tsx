@@ -39,6 +39,7 @@ import {
   ScreenHeader,
   SectionHeader,
   Segmented,
+  ShowMoreToggle,
   Skeleton,
   Toggle,
   ToggleRow,
@@ -48,6 +49,9 @@ import { frDate, todayIso } from '../lib/dates';
 import '../lib/calendarLocale';
 
 type DatePreset = '7d' | '30d' | '90d' | 'all';
+
+/** Nombre de traitements par défaut affichés avant « Voir plus ». */
+const MEDS_PREVIEW = 2;
 
 export default function SettingsScreen() {
   const [medications, setMedications] = useState<MedicationDefinition[]>([]);
@@ -74,7 +78,8 @@ export default function SettingsScreen() {
   const [labMarkers, setLabMarkers] = useState<LabMarkerDefinition[]>([]);
 
   const [exporting, setExporting] = useState(false);
-  const [datePreset, setDatePreset] = useState<DatePreset>('30d');
+  const [datePreset, setDatePreset] = useState<DatePreset | null>(null);
+  const [showAllMeds, setShowAllMeds] = useState(false);
   const [includeSymptoms, setIncludeSymptoms] = useState(true);
   const [includeHairCare, setIncludeHairCare] = useState(true);
   const [includeMedications, setIncludeMedications] = useState(true);
@@ -256,6 +261,7 @@ export default function SettingsScreen() {
   };
 
   const handleGenerateExcel = async () => {
+    if (!datePreset) return;
     setExporting(true);
     try {
       let startDate: string | undefined;
@@ -336,7 +342,7 @@ export default function SettingsScreen() {
             </View>
           )}
           <View style={{ gap: 8 }}>
-            {medications.map((med) => {
+            {(showAllMeds ? medications : medications.slice(0, MEDS_PREVIEW)).map((med) => {
               const isEditing = editingMedId === med.id;
               return (
                 <View key={med.id} style={styles.medRow}>
@@ -366,6 +372,13 @@ export default function SettingsScreen() {
               );
             })}
           </View>
+          {medications.length > MEDS_PREVIEW && (
+            <ShowMoreToggle
+              expanded={showAllMeds}
+              hiddenCount={medications.length - MEDS_PREVIEW}
+              onToggle={() => setShowAllMeds((v) => !v)}
+            />
+          )}
           {!showAddMed ? (
             <PillButton label="Ajouter un traitement" icon={CirclePlus} variant="ghost" compact onPress={() => setShowAddMed(true)} />
           ) : (
@@ -388,20 +401,24 @@ export default function SettingsScreen() {
             <AppText variant="labelMd">Période</AppText>
             <View style={styles.wrap}>
               {([['7d', '7 jours'], ['30d', '30 jours'], ['90d', '3 mois'], ['all', 'Tout']] as const).map(([id, label]) => (
-                <Chip key={id} label={label} selected={datePreset === id} onPress={() => setDatePreset(id as DatePreset)} style={styles.flatChip} />
+                <Chip key={id} label={label} selected={datePreset === id} onPress={() => setDatePreset(id as DatePreset)} style={datePreset !== id && styles.flatChip} />
               ))}
             </View>
           </View>
-          <View style={{ gap: 8 }}>
-            <AppText variant="labelMd">Données à inclure</AppText>
-            <ToggleRow icon={Activity} title="Anxiété, boule gorge & disputes" value={includeSymptoms} onValueChange={setIncludeSymptoms} />
-            <ToggleRow icon={Sparkles} title="Cheveux, lavages & coupes" value={includeHairCare} onValueChange={setIncludeHairCare} />
-            <ToggleRow icon={Pill} title="Compléments pris & dosages" value={includeMedications} onValueChange={setIncludeMedications} />
-            <ToggleRow icon={Droplet} title="Cycle menstruel" value={includeCycle} onValueChange={setIncludeCycle} />
-            <ToggleRow icon={FlaskConical} title="Bilans de prises de sang" value={includeLabTests} onValueChange={setIncludeLabTests} />
-            <ToggleRow icon={SlidersHorizontal} title="Normes fonctionnelles" value={includeLabNorms} onValueChange={setIncludeLabNorms} />
-          </View>
-          <PillButton label="Générer et partager le fichier" icon={Share2} loading={exporting} onPress={handleGenerateExcel} />
+          {datePreset && (
+            <>
+              <View style={{ gap: 8 }}>
+                <AppText variant="labelMd">Données à inclure</AppText>
+                <ToggleRow icon={Activity} title="Anxiété, boule gorge & disputes" value={includeSymptoms} onValueChange={setIncludeSymptoms} />
+                <ToggleRow icon={Sparkles} title="Cheveux, lavages & coupes" value={includeHairCare} onValueChange={setIncludeHairCare} />
+                <ToggleRow icon={Pill} title="Compléments pris & dosages" value={includeMedications} onValueChange={setIncludeMedications} />
+                <ToggleRow icon={Droplet} title="Cycle menstruel" value={includeCycle} onValueChange={setIncludeCycle} />
+                <ToggleRow icon={FlaskConical} title="Bilans de prises de sang" value={includeLabTests} onValueChange={setIncludeLabTests} />
+                <ToggleRow icon={SlidersHorizontal} title="Normes fonctionnelles" value={includeLabNorms} onValueChange={setIncludeLabNorms} />
+              </View>
+              <PillButton label="Générer et partager le fichier" icon={Share2} loading={exporting} onPress={handleGenerateExcel} />
+            </>
+          )}
         </Card>
 
         {/* ── Compte ── */}

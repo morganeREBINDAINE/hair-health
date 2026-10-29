@@ -6,36 +6,54 @@ import { AppText } from './ui';
 
 // Graphiques légers en SVG (react-native-gifted-charts plante sur le web).
 
-/** Barres pilule verticales — une par point, couleur d'alerte au-dessus du seuil. */
+/** Barres pilule verticales — une par point, en rouge les jours de règles, avec légende optionnelle. */
 export function PillBarChart({
   data,
   height = 150,
-  alertAbove,
+  legend,
 }: {
-  data: { value: number; label: string }[];
+  data: { value: number; label: string; menstrual?: boolean }[];
   height?: number;
-  alertAbove?: number;
+  legend?: boolean;
 }) {
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
-    <View style={[styles.bars, { height: height + 40 }]}>
-      {data.map((d, i) => {
-        const alert = alertAbove !== undefined && d.value > alertAbove;
-        const h = Math.max(18, (d.value / max) * height);
-        return (
-          <View key={`${d.label}-${i}`} style={styles.barCol}>
-            <AppText variant="labelSm" color={alert ? Palette.coralDeep : Palette.textVariant}>
-              {d.value}
-            </AppText>
-            <View
-              style={[styles.bar, { height: h, backgroundColor: alert ? Palette.coral : Palette.lime }]}
-            />
-            <AppText variant="labelSm" color={Palette.textMuted} style={{ fontSize: 9 }}>
-              {d.label}
-            </AppText>
-          </View>
-        );
-      })}
+    <View style={{ gap: 12 }}>
+      <View style={[styles.bars, { height: height + 40 }]}>
+        {data.map((d, i) => {
+          const h = Math.max(18, (d.value / max) * height);
+          return (
+            <View key={`${d.label}-${i}`} style={styles.barCol}>
+              <AppText variant="labelSm" color={d.menstrual ? Palette.menstrualDeep : Palette.textVariant}>
+                {d.value}
+              </AppText>
+              <View
+                style={[styles.bar, { height: h, backgroundColor: d.menstrual ? Palette.menstrual : Palette.lime }]}
+              />
+              <AppText variant="labelSm" color={Palette.textMuted} style={{ fontSize: 9 }}>
+                {d.label}
+              </AppText>
+            </View>
+          );
+        })}
+      </View>
+      {legend && (
+        <View style={styles.legend}>
+          <LegendItem color={Palette.lime} label="Jour normal" />
+          <LegendItem color={Palette.menstrual} label="Jour de règles" />
+        </View>
+      )}
+    </View>
+  );
+}
+
+function LegendItem({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendDot, { backgroundColor: color }]} />
+      <AppText variant="labelSm" color={Palette.textVariant}>
+        {label}
+      </AppText>
     </View>
   );
 }
@@ -217,4 +235,7 @@ const styles = StyleSheet.create({
   barCol: { alignItems: 'center', gap: 6, flex: 1 },
   bar: { width: 18, borderRadius: 9 },
   axis: { flexDirection: 'row', justifyContent: 'space-between' },
+  legend: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 16 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
 });

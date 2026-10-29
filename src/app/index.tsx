@@ -1,38 +1,40 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, Pressable } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   Activity,
-  Scissors,
   ChartColumn,
-  TriangleAlert,
-  TrendingUp,
-  TrendingDown,
-  ChevronRight,
-  Pill,
-  Droplet,
   Check,
-  Smile,
+  ChevronRight,
+  CircleCheck,
+  Clock,
+  Droplet,
   Frown,
   NotebookPen,
+  Pill,
+  Scissors,
+  Smile,
   Sparkles,
-  Clock,
-  ScanLine,
-  CircleCheck,
+  TrendingDown,
+  TrendingUp,
+  TriangleAlert
 } from 'lucide-react-native';
-import { Palette, Spacing, DockClearance, Type } from '../constants/theme';
-import { StorageService } from '../services/storageService';
-import { CyclePrediction, CycleStatus, DailyLog, LabMarkerDefinition, LabTest, PlannedCheckup, TreatmentPlan } from '../types';
-import { todayIso, shiftIso, dayShort, daysBetween, frDate } from '../lib/dates';
-import { getCycleStatus, getPeriods, predictNextPeriod } from '../lib/cycle';
-import { AppText, Badge, Card, IconCircle, ScreenHeader, Skeleton, SkeletonCard, type BadgeTone } from '../components/ui';
-import { PillBarChart } from '../components/charts';
-import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
-import { Toast } from '../lib/toast';
-import { computeRecheckReminders, type RecheckReminder } from '../lib/labStatus';
-import { checkupLabel } from '../components/analyses/Planning';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { BloodTestSheet } from '../components/analyses/BloodTestSheet';
 import { ExamSheet } from '../components/analyses/ExamSheet';
+import { checkupLabel } from '../components/analyses/Planning';
+import { PillBarChart } from '../components/charts';
+import { AppText, Badge, Card, IconCircle, ScreenHeader, ShowMoreToggle, Skeleton, SkeletonCard, type BadgeTone } from '../components/ui';
+import { DockClearance, Palette, Spacing, Type } from '../constants/theme';
+import { getCycleStatus, getPeriods, hasFlow, predictNextPeriod } from '../lib/cycle';
+import { dayShort, daysBetween, frDate, shiftIso, todayIso } from '../lib/dates';
+import { computeRecheckReminders, type RecheckReminder } from '../lib/labStatus';
+import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
+import { Toast } from '../lib/toast';
+import { StorageService } from '../services/storageService';
+import { CyclePrediction, CycleStatus, DailyLog, LabMarkerDefinition, LabTest, PlannedCheckup, TreatmentPlan } from '../types';
+
+/** Nombre de prochaines prises de sang affichées avant « Voir plus ». */
+const NEXT_CHECKS_PREVIEW = 3;
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
@@ -49,6 +51,7 @@ export default function DashboardScreen() {
   // Rendez-vous en cours de saisie (« C'est fait ») ; `session` sert de key au formulaire
   const [completing, setCompleting] = useState<{ item: PlannedCheckup; session: number } | null>(null);
   const [completeSession, setCompleteSession] = useState(0);
+  const [showAllChecks, setShowAllChecks] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -145,6 +148,7 @@ export default function DashboardScreen() {
   const nextChecks = computeRecheckReminders(labTests, labMarkers, todayStr);
   const upcoming = checkups.filter((c) => !c.done);
   const plannedCodes = new Set(upcoming.filter((c) => c.kind === 'blood').flatMap((c) => c.markerCodes));
+  const shownChecks = showAllChecks ? nextChecks : nextChecks.slice(0, NEXT_CHECKS_PREVIEW);
 
   // ── Graphique chute ──
   const hairChartData = logs
@@ -153,6 +157,7 @@ export default function DashboardScreen() {
     .map((l) => ({
       value: l.hairLossAmount as number,
       label: l.date.slice(8) + '/' + l.date.slice(5, 7),
+      menstrual: hasFlow(l),
     }));
 
   return (
@@ -303,9 +308,8 @@ export default function DashboardScreen() {
               <TriangleAlert size={17} color={Palette.coralDeep} />
               <AppText variant="bodySm" color={Palette.textVariant} style={{ flex: 1 }}>
                 {peak
-                  ? `Pic émotionnel ${dayShort(peak.date).toLowerCase()}. (${peak.score}/10${
-                      peakLog?.conflictWithHusband ? ', dispute' : ''
-                    }${peakLog?.hairLossAmount != null ? `, chute ~${peakLog.hairLossAmount}` : ''})`
+                  ? `Pic émotionnel ${dayShort(peak.date).toLowerCase()}. (${peak.score}/10${peakLog?.conflictWithHusband ? ', dispute' : ''
+                  }${peakLog?.hairLossAmount != null ? `, chute ~${peakLog.hairLossAmount}` : ''})`
                   : `${conflictDays} dispute${conflictDays > 1 ? 's' : ''} de couple cette semaine`}
               </AppText>
             </View>
@@ -384,7 +388,7 @@ export default function DashboardScreen() {
                 </AppText>
               </Pressable>
             </View>
-            {nextChecks.map((r) => (
+            {shownChecks.map((r) => (
               <BloodCheckRow
                 key={r.marker.id}
                 check={r}
@@ -392,6 +396,13 @@ export default function DashboardScreen() {
                 onPress={() => router.push({ pathname: '/marker/[id]', params: { id: r.marker.id } })}
               />
             ))}
+            {nextChecks.length > NEXT_CHECKS_PREVIEW && (
+              <ShowMoreToggle
+                expanded={showAllChecks}
+                hiddenCount={nextChecks.length - NEXT_CHECKS_PREVIEW}
+                onToggle={() => setShowAllChecks((v) => !v)}
+              />
+            )}
           </View>
         )}
 
@@ -405,7 +416,7 @@ export default function DashboardScreen() {
             <Badge label="Dernières saisies" />
           </View>
           {hairChartData.length > 1 ? (
-            <PillBarChart data={hairChartData} alertAbove={80} />
+            <PillBarChart data={hairChartData} legend />
           ) : (
             <EmptyHint text="Renseigne au moins 2 estimations de chute dans le journal pour afficher l'évolution." />
           )}
@@ -432,7 +443,7 @@ export default function DashboardScreen() {
           editing={null}
           fromPlan={completing.item}
           // L'accueil n'affiche pas la liste des examens
-          onExamsChange={() => {}}
+          onExamsChange={() => { }}
           onCheckupsChange={setCheckups}
         />
       )}
@@ -512,27 +523,28 @@ function PlannedCard({
         pressed && { transform: [{ scale: 0.985 }] },
       ]}>
       <View style={styles.rowBetween}>
-        <IconCircle
+        {/* <IconCircle
           icon={blood ? Droplet : ScanLine}
           size={40}
           bg={blood ? 'rgba(255,255,255,0.2)' : 'rgba(18,22,20,0.08)'}
           color={fg}
-        />
+        /> */}
+        <View style={{ gap: 2, flex: 1 }}>
+          <AppText variant="labelSm" color={muted}>
+            {blood ? 'Prise de sang' : 'Examen'} · {frDate(item.date)}
+          </AppText>
+          <AppText variant="labelMd" color={fg} style={{ fontSize: 15 }} numberOfLines={3}>
+            {label}
+          </AppText>
+          {item.note ? (
+            <AppText variant="bodySm" color={muted} numberOfLines={1}>
+              {item.note}
+            </AppText>
+          ) : null}
+        </View>
         <Badge label={when} tone={blood ? 'light' : 'dark'} />
       </View>
-      <View style={{ gap: 2, flex: 1 }}>
-        <AppText variant="labelSm" color={muted}>
-          {blood ? 'Prise de sang' : 'Examen'} · {frDate(item.date)}
-        </AppText>
-        <AppText variant="labelMd" color={fg} style={{ fontSize: 15 }} numberOfLines={3}>
-          {label}
-        </AppText>
-        {item.note ? (
-          <AppText variant="bodySm" color={muted} numberOfLines={1}>
-            {item.note}
-          </AppText>
-        ) : null}
-      </View>
+
       <Pressable
         onPress={onDone}
         accessibilityLabel="C'est fait, saisir le résultat"
@@ -612,12 +624,12 @@ function BloodCheckRow({
     daysLeft === null
       ? 'À faire'
       : daysLeft === 0
-      ? "Aujourd'hui"
-      : daysLeft < 0
-      ? `En retard ${-daysLeft} j`
-      : daysLeft <= 60
-      ? `Dans ${daysLeft} j`
-      : `Dans ${Math.round(daysLeft / 30)} mois`;
+        ? "Aujourd'hui"
+        : daysLeft < 0
+          ? `En retard ${-daysLeft} j`
+          : daysLeft <= 60
+            ? `Dans ${daysLeft} j`
+            : `Dans ${Math.round(daysLeft / 30)} mois`;
 
   return (
     <Card onPress={onPress} style={[styles.careRow, due && styles.bloodDue]}>
@@ -793,7 +805,7 @@ const styles = StyleSheet.create({
   // Le carrousel déborde jusqu'aux bords de l'écran tout en restant aligné sur la marge
   carouselBleed: { marginHorizontal: -Spacing.margin },
   carousel: { paddingHorizontal: Spacing.margin, gap: 12, flexGrow: 1 },
-  plannedCard: { width: 250, minHeight: 170, borderRadius: 24, padding: 16, gap: 12 },
+  plannedCard: { width: 250, borderRadius: 24, padding: 16, gap: 12 },
   doneBtn: {
     flexDirection: 'row',
     alignItems: 'center',
