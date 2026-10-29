@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -68,6 +68,9 @@ function dayCategories(log: DailyLog | undefined, hasBlood: boolean) {
   return cats;
 }
 
+/** Délai max entre deux touchers sur le même jour pour un double toucher (ms). */
+const DOUBLE_TAP_DELAY = 300;
+
 const anxietyLevel = (s: number) => (s >= 9 ? 'Aigu' : s >= 7 ? 'Élevé' : s >= 4 ? 'Modéré' : s >= 1 ? 'Léger' : 'Paisible');
 
 export default function CalendarScreen() {
@@ -79,6 +82,7 @@ export default function CalendarScreen() {
   const [logs, setLogs] = useState<Record<string, DailyLog>>({});
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const initialSyncing = useInitialSyncing();
+  const lastMonthTap = useRef<{ iso: string; at: number } | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -106,6 +110,44 @@ export default function CalendarScreen() {
     (category === 'all' || category === c) && selectedCats.some((x) => x.key === c);
 
   const stripDays = Array.from({ length: 5 }).map((_, i) => shiftIso(selectedDate, i - 2));
+
+  // Vue mois : un toucher affiche le résumé du jour, un double toucher ouvre la vue jour
+  const handleMonthDayPress = (iso: string, now: number) => {
+    const last = lastMonthTap.current;
+    setSelectedDate(iso);
+    if (last && last.iso === iso && now - last.at < DOUBLE_TAP_DELAY) {
+      lastMonthTap.current = null;
+      setShowMonth(false);
+    } else {
+      lastMonthTap.current = { iso, at: now };
+    }
+  };
+
+  const categoryChips = (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsScroll}>
+      {CATEGORIES.map((c) => (
+        <Chip
+          key={c.id}
+          label={c.label}
+          icon={c.icon}
+          selected={category === c.id}
+          count={c.id === 'all' ? selectedCats.length : undefined}
+          onPress={() => setCategory(c.id)}
+        />
+      ))}
+    </ScrollView>
+  );
+
+  const colorLegend = (
+    <View style={styles.legendRow}>
+      {COLOR_LEGEND.map((item) => (
+        <View key={item.label} style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+          <AppText variant="bodySm" color={Palette.textMuted}>{item.label}</AppText>
+        </View>
+      ))}
+    </View>
+  );
 
   const goToEntry = () => router.push({ pathname: '/entry', params: { date: selectedDate } });
 
@@ -141,56 +183,56 @@ export default function CalendarScreen() {
           </View>
 
           {showMonth ? (
-            <Card style={{ padding: 10 }}>
-              <Calendar
-                key={selectedDate.slice(0, 7)}
-                current={selectedDate}
-                onDayPress={(day: { dateString: string }) => setSelectedDate(day.dateString)}
-                firstDay={1}
-                dayComponent={({ date, state }: any) => {
-                  if (!date) return null;
-                  const iso: string = date.dateString;
-                  const isSelected = iso === selectedDate;
-                  const isToday = iso === todayStr;
-                  const dots = dayCategories(logs[iso], bloodByDate.has(iso)).filter(
-                    (c) => category === 'all' || c.key === category
-                  );
-                  return (
-                    <Pressable
-                      onPress={() => {
-                        setSelectedDate(iso);
-                        setShowMonth(false);
-                      }}
-                      style={[
-                        styles.monthDay,
-                        !isSelected && (category === 'all' || category === 'cycle') && isPredicted(iso) && styles.monthDayPredicted,
-                        isSelected && styles.monthDaySelected,
-                        isToday && !isSelected && styles.monthDayToday,
-                      ]}>
-                      <AppText
-                        variant="labelMd"
-                        color={state === 'disabled' ? Palette.outlineVariant : Palette.text}>
-                        {date.day}
-                      </AppText>
-                      <View style={styles.dotsRow}>
-                        {dots.slice(0, 4).map((d) => (
-                          <View key={d.key} style={[styles.dot, { backgroundColor: isSelected ? Palette.obsidian : d.color }]} />
-                        ))}
-                      </View>
-                    </Pressable>
-                  );
-                }}
-                theme={{
-                  calendarBackground: 'transparent',
-                  textSectionTitleColor: Palette.textMuted,
-                  arrowColor: Palette.obsidian,
-                  monthTextColor: Palette.text,
-                  textMonthFontFamily: Type.headlineSm.fontFamily,
-                  textDayHeaderFontFamily: Type.labelSm.fontFamily,
-                  textMonthFontSize: 16,
-                }}
-              />
-            </Card>
+            <>
+              {categoryChips}
+              <Card style={{ padding: 10 }}>
+                <Calendar
+                  key={selectedDate.slice(0, 7)}
+                  current={selectedDate}
+                    firstDay={1}
+                  dayComponent={({ date, state }: any) => {
+                    if (!date) return null;
+                    const iso: string = date.dateString;
+                    const isSelected = iso === selectedDate;
+                    const isToday = iso === todayStr;
+                    const dots = dayCategories(logs[iso], bloodByDate.has(iso)).filter(
+                      (c) => category === 'all' || c.key === category
+                    );
+                    return (
+                      <Pressable
+                        onPress={(e) => handleMonthDayPress(iso, e.timeStamp)}
+                        style={[
+                          styles.monthDay,
+                          !isSelected && (category === 'all' || category === 'cycle') && isPredicted(iso) && styles.monthDayPredicted,
+                          isSelected && styles.monthDaySelected,
+                          isToday && !isSelected && styles.monthDayToday,
+                        ]}>
+                        <AppText
+                          variant="labelMd"
+                          color={state === 'disabled' ? Palette.outlineVariant : Palette.text}>
+                          {date.day}
+                        </AppText>
+                        <View style={styles.dotsRow}>
+                          {dots.slice(0, 4).map((d) => (
+                            <View key={d.key} style={[styles.dot, { backgroundColor: isSelected ? Palette.obsidian : d.color }]} />
+                          ))}
+                        </View>
+                      </Pressable>
+                    );
+                  }}
+                  theme={{
+                    calendarBackground: 'transparent',
+                    textSectionTitleColor: Palette.textMuted,
+                    arrowColor: Palette.obsidian,
+                    monthTextColor: Palette.text,
+                    textMonthFontFamily: Type.headlineSm.fontFamily,
+                    textDayHeaderFontFamily: Type.labelSm.fontFamily,
+                    textMonthFontSize: 16,
+                  }}
+                />
+              </Card>
+              {colorLegend}
+            </>
           ) : (
             <View style={styles.stripRow}>
               {stripDays.map((item) => {
@@ -220,29 +262,9 @@ export default function CalendarScreen() {
           )}
         </View>
 
-        {/* Catégories */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsScroll}>
-          {CATEGORIES.map((c) => (
-            <Chip
-              key={c.id}
-              label={c.label}
-              icon={c.icon}
-              selected={category === c.id}
-              count={c.id === 'all' ? selectedCats.length : undefined}
-              onPress={() => setCategory(c.id)}
-            />
-          ))}
-        </ScrollView>
-
-        {/* Légende couleurs */}
-        <View style={styles.legendRow}>
-          {COLOR_LEGEND.map((item) => (
-            <View key={item.label} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-              <AppText variant="bodySm" color={Palette.textMuted}>{item.label}</AppText>
-            </View>
-          ))}
-        </View>
+        {/* Vue semaine : catégories puis légende sous le sélecteur de jour */}
+        {!showMonth && categoryChips}
+        {!showMonth && colorLegend}
 
         {/* Chronologie du jour */}
         <View style={{ gap: 12 }}>
@@ -406,6 +428,11 @@ export default function CalendarScreen() {
                         .filter(Boolean)
                         .join(' · ')}
                     </AppText>
+                    {selectedLog.conflictWithHusband && !!selectedLog.conflictNote && (
+                      <AppText variant="bodySm" color={Palette.textVariant} style={{ marginTop: 4 }}>
+                        « {selectedLog.conflictNote} »
+                      </AppText>
+                    )}
                   </View>
                 </View>
               )}
@@ -428,11 +455,6 @@ export default function CalendarScreen() {
 
           {visible('sleep') && selectedLog && (
             <SmallEventCard
-                    {selectedLog.conflictWithHusband && !!selectedLog.conflictNote && (
-                      <AppText variant="bodySm" color={Palette.textVariant} style={{ marginTop: 4 }}>
-                        « {selectedLog.conflictNote} »
-                      </AppText>
-                    )}
               icon={Moon}
               color={CategoryColors.sleep}
               title="Sommeil & fatigue"
