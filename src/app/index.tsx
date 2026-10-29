@@ -141,11 +141,10 @@ export default function DashboardScreen() {
   const cyclePrediction = predictNextPeriod(getPeriods(logsRecord));
 
   // ── Contrôles à prévoir et rendez-vous planifiés ──
-  const reminders = computeRecheckReminders(labTests, labMarkers, todayStr);
+  // Seules les molécules avec une fréquence de suivi ont un rappel ; affichés à titre indicatif
+  const nextChecks = computeRecheckReminders(labTests, labMarkers, todayStr);
   const upcoming = checkups.filter((c) => !c.done);
-  // Les contrôles échus deviennent des rendez-vous : on ne garde ici que ceux qui n'en ont pas encore
   const plannedCodes = new Set(upcoming.filter((c) => c.kind === 'blood').flatMap((c) => c.markerCodes));
-  const nextChecks = reminders.filter((r) => !r.due || !plannedCodes.has(r.marker.code));
 
   // ── Graphique chute ──
   const hairChartData = logs
@@ -342,23 +341,35 @@ export default function DashboardScreen() {
               <AppText variant="headlineSm">Rendez-vous planifiés</AppText>
               <Badge label={String(upcoming.length)} tone="limeSoft" />
             </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.carousel}
-              style={styles.carouselBleed}>
-              {upcoming.map((c) => (
-                <PlannedCard
-                  key={c.id}
-                  item={c}
-                  label={checkupLabel(c, labMarkers)}
-                  today={todayStr}
-                  single={upcoming.length === 1}
-                  onOpen={() => router.push({ pathname: '/analyses', params: { tab: 'planned' } })}
-                  onDone={() => openCompletion(c)}
-                />
-              ))}
-            </ScrollView>
+            {/* Un seul rendez-vous : hors carrousel, la carte est bornée à la largeur de l'écran */}
+            {upcoming.length === 1 ? (
+              <PlannedCard
+                item={upcoming[0]}
+                label={checkupLabel(upcoming[0], labMarkers)}
+                today={todayStr}
+                single
+                onOpen={() => router.push({ pathname: '/analyses', params: { tab: 'planned' } })}
+                onDone={() => openCompletion(upcoming[0])}
+              />
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.carousel}
+                style={styles.carouselBleed}>
+                {upcoming.map((c) => (
+                  <PlannedCard
+                    key={c.id}
+                    item={c}
+                    label={checkupLabel(c, labMarkers)}
+                    today={todayStr}
+                    single={false}
+                    onOpen={() => router.push({ pathname: '/analyses', params: { tab: 'planned' } })}
+                    onDone={() => openCompletion(c)}
+                  />
+                ))}
+              </ScrollView>
+            )}
           </View>
         )}
 
@@ -377,6 +388,7 @@ export default function DashboardScreen() {
               <BloodCheckRow
                 key={r.marker.id}
                 check={r}
+                planned={plannedCodes.has(r.marker.code)}
                 onPress={() => router.push({ pathname: '/marker/[id]', params: { id: r.marker.id } })}
               />
             ))}
@@ -495,7 +507,7 @@ function PlannedCard({
       onPress={onOpen}
       style={({ pressed }) => [
         styles.plannedCard,
-        single && { width: undefined, flex: 1 },
+        single && { width: '100%' },
         { backgroundColor: blood ? Palette.coralDeep : Palette.lime },
         pressed && { transform: [{ scale: 0.985 }] },
       ]}>
@@ -512,7 +524,7 @@ function PlannedCard({
         <AppText variant="labelSm" color={muted}>
           {blood ? 'Prise de sang' : 'Examen'} · {frDate(item.date)}
         </AppText>
-        <AppText variant="labelMd" color={fg} style={{ fontSize: 15 }} numberOfLines={2}>
+        <AppText variant="labelMd" color={fg} style={{ fontSize: 15 }} numberOfLines={3}>
           {label}
         </AppText>
         {item.note ? (
@@ -575,7 +587,15 @@ function CareRow({
   );
 }
 
-function BloodCheckRow({ check, onPress }: { check: RecheckReminder; onPress?: () => void }) {
+function BloodCheckRow({
+  check,
+  planned,
+  onPress,
+}: {
+  check: RecheckReminder;
+  planned: boolean;
+  onPress?: () => void;
+}) {
   const { due, last, months, dueDate, daysLeft, marker, status } = check;
   const outOfRange = status === 'low' || status === 'high';
   const fg = due ? '#FFFFFF' : Palette.text;
@@ -618,7 +638,10 @@ function BloodCheckRow({ check, onPress }: { check: RecheckReminder; onPress?: (
           {nextLine}
         </AppText>
       </View>
-      <Badge label={badge} tone={due ? 'light' : daysLeft !== null && daysLeft <= 14 ? 'amber' : 'neutral'} />
+      <View style={styles.checkBadges}>
+        <Badge label={badge} tone={due ? 'light' : daysLeft !== null && daysLeft <= 14 ? 'amber' : 'neutral'} />
+        {planned && <Badge label="Planifié" tone={due ? 'light' : 'limeSoft'} />}
+      </View>
     </Card>
   );
 }
@@ -766,6 +789,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   empty: { paddingVertical: 20, paddingHorizontal: 12 },
+  checkBadges: { alignItems: 'flex-end', gap: 6 },
   // Le carrousel déborde jusqu'aux bords de l'écran tout en restant aligné sur la marge
   carouselBleed: { marginHorizontal: -Spacing.margin },
   carousel: { paddingHorizontal: Spacing.margin, gap: 12, flexGrow: 1 },

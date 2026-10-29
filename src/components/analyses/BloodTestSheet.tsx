@@ -98,6 +98,16 @@ export function BloodTestSheet({
         Toast.error(`Bilan enregistré, mais ${actionError(e, 'retirer le rendez-vous').toLowerCase()}`);
       }
     }
+
+    try {
+      // Les nouveaux résultats déplacent les échéances : on planifie la prochaine prise de sang
+      if (await StorageService.ensureAutoCheckups(todayIso())) {
+        onCheckupsChange?.(await StorageService.getPlannedCheckups());
+      }
+    } catch (e) {
+      console.error('[analyses] planification automatique', e);
+      Toast.error(`Bilan enregistré, mais ${actionError(e, 'planifier la prochaine prise de sang').toLowerCase()}`);
+    }
     setSaving(false);
     onClose();
     Alert.alert('Succès', editing ? 'Bilan de prise de sang modifié.' : 'Bilan de prise de sang enregistré.');
