@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { View, Pressable, TextInput } from 'react-native';
-import { CalendarClock, Check, Pencil, Trash2, ClipboardCheck } from 'lucide-react-native';
 import * as Crypto from 'expo-crypto';
-import { CheckupKind, LabMarkerDefinition, PlannedCheckup } from '../../types';
+import { CalendarClock, Check, ClipboardCheck, Pencil, Trash2 } from 'lucide-react-native';
+import { useState } from 'react';
+import { Pressable, TextInput, View } from 'react-native';
 import { Palette } from '../../constants/theme';
-import { AppText, Card, Chip, IconCircle, PillButton, inputStyle } from '../ui';
 import { daysBetween, frDate, todayIso } from '../../lib/dates';
+import { CheckupKind, LabMarkerDefinition, PlannedCheckup } from '../../types';
+import { AppText, Card, Chip, IconCircle, PillButton, inputStyle } from '../ui';
 import { BottomSheet, DateField, Field, sharedStyles } from './shared';
 
 /** Libellé lisible d'une planification (molécules ou examen). */
