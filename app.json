@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Hair & Health Tracker",
+    "name": "Santé Hijra",
     "slug": "hair-health-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.mrebindaine.hairhealthtracker"
+      "package": "com.mrebindaine.hairhealthtracker",
+      "versionCode": 12
     },
     "web": {
       "output": "single",

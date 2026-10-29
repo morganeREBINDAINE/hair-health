@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
 import { Image } from 'expo-image';
 import { LogIn } from 'lucide-react-native';
-import { signInWithGoogle } from '../lib/supabase';
+import { useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
 import { Palette, Radius, Spacing } from '../constants/theme';
+import { signInWithGoogle } from '../lib/supabase';
 import { AppText, Card, PillButton } from './ui';
 
 export default function LoginScreen() {
@@ -37,7 +37,7 @@ export default function LoginScreen() {
             <Image source={require('../../assets/images/logo.png')} style={{ width: 54, height: 54 }} contentFit="contain" />
           </View>
           <AppText variant="labelSm" color={Palette.textMuted} style={styles.eyebrow}>
-            Vitalité Capillaire
+            Santé Hijra
           </AppText>
           <AppText variant="displayLg" style={{ textAlign: 'center' }}>
             Prends soin de toi, en douceur.
