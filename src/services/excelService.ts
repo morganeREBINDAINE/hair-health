@@ -54,6 +54,7 @@ export const ExcelService = {
           row['Anxiété (sur 10)'] = log.anxietyScore ?? 'Non noté';
           row['Boule dans la gorge'] = log.lumpInThroat ? 'Oui' : 'Non';
           row['Grosse dispute'] = log.conflictWithHusband ? 'Oui' : 'Non';
+          row['Description dispute'] = log.conflictNote || '-';
         }
 
         if (options.includeMedications) {

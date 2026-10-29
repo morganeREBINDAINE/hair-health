@@ -25,6 +25,7 @@ export interface DailyLog {
   anxietyScore: number | null; // 0 to 10
   lumpInThroat: boolean; // Boule dans la gorge
   conflictWithHusband: boolean; // Grosses disputes avec mon mari
+  conflictNote?: string; // Description de la dispute (optionnel : absent des journaux mis en cache avant la fonctionnalité)
   hairLossAmount: number | null; // Chute de cheveux en nombre estimé
   haircutDone: boolean;
   haircutNotes: string;

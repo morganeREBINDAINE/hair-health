@@ -70,6 +70,7 @@ const FATIGUE_OPTIONS: { id: FatigueLevel; label: string }[] = [
 
 const SLEEP_QUICK: number[] = [5, 6, 7, 8, 9];
 
+const CONFLICT_NOTE_MAX_LENGTH = 500;
 const currentTime = () => {
   const now = new Date();
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -107,6 +108,7 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
   const [lumpInThroat, setLumpInThroat] = useState(false);
   const [conflictWithHusband, setConflictWithHusband] = useState(false);
 
+  const [conflictNote, setConflictNote] = useState('');
   const [hairLossAmount, setHairLossAmount] = useState<string>('');
   const [haircutDone, setHaircutDone] = useState(false);
   const [haircutNotes, setHaircutNotes] = useState('');
@@ -196,6 +198,7 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         setHaircutDone(existingLog.haircutDone);
         setHaircutNotes(existingLog.haircutNotes || '');
         setHairWashDone(existingLog.hairWashDone);
+        setConflictNote(existingLog.conflictNote ?? '');
         setShampooType(existingLog.shampooType);
         setHennaDone(existingLog.hennaDone);
         setSleepHours(
@@ -219,6 +222,7 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         setHairWashDone(false);
         setShampooType(null);
         setHennaDone(false);
+        setConflictNote('');
         setSleepHours('');
         setFatigueLevel(null);
         setMedications(defs.map((def) => ({ name: def.name, taken: def.isPrechecked, dosage: def.defaultDosage })));
@@ -290,8 +294,14 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
   };
 
   const handleSave = async () => {
-    if (hasCycleErrors) return;
+    if (hasFormErrors) return;
     setSaving(true);
+  const conflictNoteError =
+    conflictWithHusband && conflictNote.length > CONFLICT_NOTE_MAX_LENGTH
+      ? `La description ne doit pas dépasser ${CONFLICT_NOTE_MAX_LENGTH} caractères.`
+      : undefined;
+  const hasFormErrors = hasCycleErrors || !!conflictNoteError;
+
     try {
       const parsedHairLoss = hairLossAmount.trim() === '' ? null : parseInt(hairLossAmount, 10);
       const parsedSleep = sleepHours.trim() === '' ? null : parseFloat(sleepHours.replace(',', '.'));
@@ -309,6 +319,8 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
         hennaDone,
         sleepHours: isNaN(parsedSleep as number) ? null : parsedSleep,
         fatigueLevel,
+        // Dispute décochée : la description est effacée
+        conflictNote: conflictWithHusband ? conflictNote.trim() : '',
         medications,
         menstrualFlow: cycleCardVisible && periodToday ? flow : null,
         menstrualPain: cycleCardVisible && periodToday ? pain : null,
@@ -537,6 +549,26 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
               subtitle="Nuit dernière et état au réveil"
               right={sleepHours ? <Badge label={`${sleepHours} h`} tone="neutral" /> : undefined}
             />
+            {conflictWithHusband && (
+              <View style={{ gap: 6 }}>
+                <TextInput
+                  style={[inputStyle, styles.noteInput]}
+                  value={conflictNote}
+                  onChangeText={setConflictNote}
+                  placeholder="Décris la dispute (facultatif)"
+                  placeholderTextColor={Palette.textMuted}
+                  multiline
+                />
+                <View style={styles.rowBetween}>
+                  {conflictNoteError ? <FieldError text={conflictNoteError} /> : <View />}
+                  <AppText
+                    variant="bodySm"
+                    color={conflictNote.length > CONFLICT_NOTE_MAX_LENGTH ? Palette.error : Palette.textMuted}>
+                    {conflictNote.length} / {CONFLICT_NOTE_MAX_LENGTH}
+                  </AppText>
+                </View>
+              </View>
+            )}
             <View style={{ gap: 10 }}>
               <AppText variant="labelMd">Heures de sommeil</AppText>
               <View style={styles.wrap}>
@@ -745,7 +777,7 @@ export const DailyEntryForm: React.FC<DailyEntryFormProps> = ({ selectedDate, on
               label={saving ? 'Sauvegarde en cours…' : 'Enregistrer la journée'}
               icon={CircleCheck}
               loading={saving}
-              disabled={hasCycleErrors}
+              disabled={hasFormErrors}
               onPress={handleSave}
             />
             {hasCycleErrors && (
@@ -790,6 +822,11 @@ const styles = StyleSheet.create({
   scale: { flexDirection: 'row', justifyContent: 'space-between', gap: 3 },
   scaleBtn: {
     flex: 1,
+            {conflictNoteError && (
+              <AppText variant="bodySm" color={Palette.error} style={{ textAlign: 'center' }}>
+                Raccourcis la description de la dispute pour enregistrer.
+              </AppText>
+            )}
     height: 42,
     maxWidth: 40,
     borderRadius: Radius.full,

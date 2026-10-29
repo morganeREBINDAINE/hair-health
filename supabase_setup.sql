@@ -51,6 +51,7 @@ create table if not exists public.daily_logs (
   anxiety_score int check (anxiety_score between 0 and 10),
   lump_in_throat boolean default false,
   conflict_with_husband boolean default false,
+  conflict_note text default '', -- description de la dispute (vide si aucune)
   hair_loss_amount int default null, -- nombre estimé de cheveux perdus (ex: 50, 100)
   haircut_done boolean default false,
   haircut_notes text default '',

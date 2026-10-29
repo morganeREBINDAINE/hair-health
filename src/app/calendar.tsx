@@ -428,6 +428,11 @@ export default function CalendarScreen() {
 
           {visible('sleep') && selectedLog && (
             <SmallEventCard
+                    {selectedLog.conflictWithHusband && !!selectedLog.conflictNote && (
+                      <AppText variant="bodySm" color={Palette.textVariant} style={{ marginTop: 4 }}>
+                        « {selectedLog.conflictNote} »
+                      </AppText>
+                    )}
               icon={Moon}
               color={CategoryColors.sleep}
               title="Sommeil & fatigue"
