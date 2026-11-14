@@ -123,7 +123,7 @@ Les titres ont un espacement négatif (déjà intégré aux tokens). Le surtitre
 ### Motifs récurrents
 
 - **Carte KPI (« bento »)** : deux cartes côte à côte (`gap: Spacing.gutter`), la plus importante en obsidienne. Icône en haut, libellé `labelSm`, chiffre `displayLg`, ligne de contexte `bodySm` avec petite icône.
-- **Ligne d'élément** (`careRow`) : carte `Radius.lg`, padding 14, `IconCircle` 48 px + titre `labelMd` 15 px + sous-titre `bodySm` + badge ou chevron à droite.
+- **Ligne d'élément** (`homeStyles.itemRow`, `src/components/home/shared.tsx`) : carte `Radius.lg`, padding 14, `IconCircle` 48 px + titre `labelMd` 15 px + sous-titre `bodySm` + badge ou chevron à droite.
 - **Carrousel horizontal** : déborde jusqu'aux bords de l'écran (`marginHorizontal: -Spacing.margin`) en gardant l'alignement sur la marge.
 - **Pastille d'information** : pilule `containerLow` avec icône + phrase courte, pour un constat (pic, dispute…).
 - **Bottom sheet** : coins supérieurs `Radius.xxl`, titre `headlineMd`.
