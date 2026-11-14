@@ -39,7 +39,6 @@ import {
   PillButton,
   ScreenHeader,
   SectionHeader,
-  Segmented,
   ShowMoreToggle,
   Skeleton,
   Toggle,
@@ -199,7 +198,7 @@ export default function SettingsScreen() {
       return;
     }
     if (planType === 'cure' && !planEndDate) {
-      Alert.alert('Date de fin', 'Une cure doit avoir une date de fin.');
+      Alert.alert('Date de fin', 'Un traitement ponctuel doit avoir une date de fin.');
       return;
     }
 
@@ -280,51 +279,10 @@ export default function SettingsScreen() {
     }
   };
 
-  const fondPlans = treatmentPlans.filter((p) => p.type === 'fond');
-  const curePlans = treatmentPlans.filter((p) => p.type === 'cure');
-
   return (
     <View style={styles.screen}>
       <ScreenHeader title="Paramètres" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
-        {/* ── Plans de traitement ── */}
-        <Card style={{ gap: 16 }}>
-          <SectionHeader
-            icon={Clock}
-            iconBg={Palette.limeSoft}
-            iconColor={Palette.primary}
-            title="Planification des cures"
-            subtitle="Traitements de fond & cures ponctuelles"
-          />
-
-          {initialSyncing && (
-            <View style={{ gap: 8 }}>
-              <Skeleton height={56} radius={20} />
-              <Skeleton height={56} radius={20} />
-            </View>
-          )}
-
-          {fondPlans.length > 0 && (
-            <View style={{ gap: 8 }}>
-              <AppText variant="labelMd" color={Palette.textVariant}>Traitement de fond</AppText>
-              {fondPlans.map((plan) => (
-                <PlanRow key={plan.id} plan={plan} onEdit={() => handleEditPlan(plan)} onDelete={() => handleDeletePlan(plan)} onToggle={() => handleTogglePlanActive(plan)} />
-              ))}
-            </View>
-          )}
-
-          {curePlans.length > 0 && (
-            <View style={{ gap: 8 }}>
-              <AppText variant="labelMd" color={Palette.textVariant}>Cures ponctuelles</AppText>
-              {curePlans.map((plan) => (
-                <PlanRow key={plan.id} plan={plan} onEdit={() => handleEditPlan(plan)} onDelete={() => handleDeletePlan(plan)} onToggle={() => handleTogglePlanActive(plan)} />
-              ))}
-            </View>
-          )}
-
-          <PillButton label="Ajouter un plan" icon={CirclePlus} variant="ghost" compact onPress={handleOpenAddPlan} />
-        </Card>
 
         {/* ── Traitements par défaut ── */}
         <Card style={{ gap: 16 }}>
@@ -402,6 +360,34 @@ export default function SettingsScreen() {
           )}
         </Card>
 
+        {/* ── Traitement ponctuel ── */}
+        <Card style={{ gap: 16 }}>
+          <SectionHeader
+            icon={Clock}
+            iconBg={Palette.limeSoft}
+            iconColor={Palette.primary}
+            title="Traitement ponctuel"
+            subtitle="Traitements avec une date de fin"
+          />
+
+          {initialSyncing && (
+            <View style={{ gap: 8 }}>
+              <Skeleton height={56} radius={20} />
+              <Skeleton height={56} radius={20} />
+            </View>
+          )}
+
+          {treatmentPlans.length > 0 && (
+            <View style={{ gap: 8 }}>
+              {treatmentPlans.map((plan) => (
+                <PlanRow key={plan.id} plan={plan} onEdit={() => handleEditPlan(plan)} onDelete={() => handleDeletePlan(plan)} onToggle={() => handleTogglePlanActive(plan)} />
+              ))}
+            </View>
+          )}
+
+          <PillButton label="Ajouter un plan" icon={CirclePlus} variant="ghost" compact onPress={handleOpenAddPlan} />
+        </Card>
+
         {/* ── Export Excel ── */}
         <Card style={{ gap: 18 }}>
           <SectionHeader icon={FileSpreadsheet} iconBg={Palette.limeSoft} iconColor={Palette.primary} title="Exporter mes données" subtitle="Partage avec ton médecin" />
@@ -409,7 +395,7 @@ export default function SettingsScreen() {
             <AppText variant="labelMd">Période</AppText>
             <View style={styles.wrap}>
               {([['7d', '7 jours'], ['30d', '30 jours'], ['90d', '3 mois'], ['all', 'Tout']] as const).map(([id, label]) => (
-                <Chip key={id} label={label} selected={datePreset === id} onPress={() => setDatePreset(id as DatePreset)} style={datePreset !== id && styles.flatChip} />
+                <Chip key={id} label={label} selected={datePreset === id} onPress={() => setDatePreset((prev) => (prev === id ? null : id))} style={datePreset !== id && styles.flatChip} />
               ))}
             </View>
           </View>
@@ -453,7 +439,7 @@ export default function SettingsScreen() {
                 <IconCircle icon={Clock} size={40} bg={Palette.limeSoft} color={Palette.primary} />
                 <View style={{ flexShrink: 1 }}>
                   <AppText variant="headlineSm">{editingPlan ? 'Modifier le plan' : 'Nouveau plan'}</AppText>
-                  <AppText variant="bodySm" color={Palette.textMuted}>Traitement de fond ou cure ponctuelle</AppText>
+                  <AppText variant="bodySm" color={Palette.textMuted}>Traitement ponctuel</AppText>
                 </View>
               </View>
               <Pressable onPress={() => setShowPlanModal(false)} style={styles.closeBtn} hitSlop={6}>
@@ -461,16 +447,11 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
             <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
-              <Segmented
-                options={[{ id: 'fond', label: 'Traitement de fond' }, { id: 'cure', label: 'Cure ponctuelle' }]}
-                value={planType}
-                onChange={(v) => setPlanType(v as TreatmentType)}
-              />
               <Field label="Titre">
                 <TextInput style={inputStyle} value={planName} onChangeText={setPlanName} placeholder="Ex : Cure de fer" placeholderTextColor={Palette.textMuted} />
               </Field>
               <Field label="Description (optionnel)">
-                <TextInput style={[inputStyle, { height: 72, borderRadius: Radius.lg, paddingTop: 12, textAlignVertical: 'top' }]} multiline value={planDescription} onChangeText={setPlanDescription} placeholder="Objectif de la cure..." placeholderTextColor={Palette.textMuted} />
+                <TextInput style={[inputStyle, { height: 72, borderRadius: Radius.lg, paddingTop: 12, textAlignVertical: 'top' }]} multiline value={planDescription} onChangeText={setPlanDescription} placeholder="Objectif du traitement..." placeholderTextColor={Palette.textMuted} />
               </Field>
               <Field label="Dosage">
                 <TextInput style={inputStyle} value={planDosage} onChangeText={setPlanDosage} placeholder="Ex : 48 mg par jour" placeholderTextColor={Palette.textMuted} />
