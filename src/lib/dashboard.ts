@@ -1,9 +1,10 @@
 // Calculs de l'accueil : fonctions pures, sans affichage, à partir des données déjà chargées.
 
 import { FATIGUE_OPTIONS } from '../constants/fatigue';
-import { DailyLog, FatigueLevel, PlannedCheckup, ShampooType } from '../types';
+import { DailyLog, FatigueLevel, PlannedCheckup } from '../types';
 import { hasFlow } from './cycle';
 import { dayShort, daysBetween, shiftIso } from './dates';
+import type { RecheckReminder } from './labStatus';
 
 /** Horizon des rendez-vous planifiés et des molécules à contrôler affichés sur l'accueil. */
 export const HOME_HORIZON_DAYS = 30;
@@ -122,25 +123,6 @@ export function sleepWeek(logs: DailyLog[], today: string): SleepWeek {
   return { nights, avgSleep: average(values(week, (l) => l.sleepHours)), usualFatigue };
 }
 
-// ─── Soins capillaires ──────────────────────────────────────────────────────
-
-export type HairCareHistory = {
-  wash: { date: string; shampoo: ShampooType | null } | null;
-  henna: string | null;
-  haircut: string | null;
-};
-
-/** Derniers lavage, henné et coupe notés (journaux triés par date croissante). */
-export function lastHairCare(logs: DailyLog[], today: string): HairCareHistory {
-  const past = logs.filter((l) => l.date <= today);
-  const wash = past.findLast((l) => l.hairWashDone);
-  return {
-    wash: wash ? { date: wash.date, shampoo: wash.shampooType } : null,
-    henna: past.findLast((l) => l.hennaDone)?.date ?? null,
-    haircut: past.findLast((l) => l.haircutDone)?.date ?? null,
-  };
-}
-
 // ─── Rendez-vous planifiés ──────────────────────────────────────────────────
 
 export type PlannedAgenda = {
@@ -157,4 +139,29 @@ export function plannedAgenda(checkups: PlannedCheckup[], today: string, horizon
     planned: pending.filter(inHorizon),
     nextLater: pending.find((c) => !inHorizon(c))?.date ?? null,
   };
+}
+
+// ─── Molécules à contrôler ──────────────────────────────────────────────────
+
+export type MarkerToCheck = {
+  reminder: RecheckReminder;
+  /** Déjà couverte par une prise de sang planifiée non faite. */
+  planned: boolean;
+};
+
+/**
+ * Molécules suivies à contrôler dans l'horizon, en retard ou jamais dosées,
+ * de la plus urgente à la moins urgente (ordre de `computeRecheckReminders`).
+ */
+export function markersToCheck(
+  reminders: RecheckReminder[],
+  checkups: PlannedCheckup[],
+  horizon = HOME_HORIZON_DAYS
+): MarkerToCheck[] {
+  const plannedCodes = new Set(
+    checkups.filter((c) => !c.done && c.kind === 'blood').flatMap((c) => c.markerCodes.map((code) => code.toLowerCase()))
+  );
+  return reminders
+    .filter((r) => r.due || r.daysLeft === null || r.daysLeft <= horizon)
+    .map((reminder) => ({ reminder, planned: plannedCodes.has(reminder.marker.code.toLowerCase()) }));
 }

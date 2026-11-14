@@ -23,6 +23,7 @@ export function PlanningSheet({
   visible,
   onClose,
   initialKind,
+  initialCodes,
   editing,
   markers,
   onSave,
@@ -30,6 +31,8 @@ export function PlanningSheet({
   visible: boolean;
   onClose: () => void;
   initialKind: CheckupKind;
+  /** Molécules pré-cochées pour une nouvelle prise de sang (ex. depuis l'accueil). */
+  initialCodes?: string[];
   editing: PlannedCheckup | null;
   markers: LabMarkerDefinition[];
   /** Doit lever une erreur si l'enregistrement échoue. */
@@ -37,7 +40,7 @@ export function PlanningSheet({
 }) {
   const kind = editing?.kind ?? initialKind;
   const [date, setDate] = useState(editing?.date ?? todayIso());
-  const [codes, setCodes] = useState<string[]>(editing?.markerCodes ?? []);
+  const [codes, setCodes] = useState<string[]>(editing?.markerCodes ?? initialCodes ?? []);
   const [examLabel, setExamLabel] = useState(editing?.examLabel ?? '');
   const [note, setNote] = useState(editing?.note ?? '');
   const [error, setError] = useState<string | null>(null);
