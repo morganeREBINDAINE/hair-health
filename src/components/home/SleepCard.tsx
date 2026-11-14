@@ -1,4 +1,4 @@
-import { Moon } from 'lucide-react-native';
+import { Equal, Moon, TrendingDown, TrendingUp } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 import { FATIGUE_SUMMARY } from '../../constants/fatigue';
 import { Palette, Radius, Type } from '../../constants/theme';
@@ -7,7 +7,7 @@ import { DAY_LONG, weekdayIndex } from '../../lib/dates';
 import { AppText, Badge, Card, SectionHeader } from '../ui';
 
 /** Sous ce seuil, la nuit est mise en évidence (corail). */
-const SHORT_NIGHT_HOURS = 6;
+const SHORT_NIGHT_HOURS = 7;
 /** Hauteur de barre maximale atteinte à ce nombre d'heures. */
 const MAX_BAR_HOURS = 10;
 
@@ -24,7 +24,15 @@ const shortHours = (hours: number) => String(Math.round(hours * 10) / 10).replac
 
 /** Sommeil des 7 derniers jours : moyenne, état de fatigue habituel et heures par nuit. */
 export function SleepCard({ sleep, today }: { sleep: SleepWeek; today: string }) {
-  const { nights, avgSleep, usualFatigue } = sleep;
+  const { nights, avgSleep, usualFatigue, sleepTrend } = sleep;
+  const trend =
+    sleepTrend === 'up'
+      ? { Icon: TrendingUp, color: Palette.limeFixed, text: 'en hausse' }
+      : sleepTrend === 'down'
+        ? { Icon: TrendingDown, color: Palette.coralContainer, text: 'en baisse' }
+        : sleepTrend === 'stable'
+          ? { Icon: Equal, color: Palette.obsidianMuted, text: 'stable' }
+          : null;
   const avgLabel = avgSleep !== null ? formatHours(avgSleep) : '–';
   const fatigueLabel = usualFatigue ? FATIGUE_SUMMARY[usualFatigue] : 'Non noté';
 
@@ -33,13 +41,16 @@ export function SleepCard({ sleep, today }: { sleep: SleepWeek; today: string })
       <SectionHeader icon={Moon} title="Mon sommeil" subtitle="Heures de sommeil par nuit" right={<Badge label="7 jours" />} />
 
       <View style={styles.stats}>
-        <View style={[styles.stat, styles.statDark]} accessible accessibilityLabel={`Sommeil moyen : ${avgLabel}`}>
+        <View style={[styles.stat, styles.statDark]} accessible accessibilityLabel={`Sommeil moyen : ${avgLabel}${trend ? `, ${trend.text} par rapport à la semaine précédente` : ''}`}>
           <AppText variant="labelSm" color={Palette.obsidianMuted}>
             Sommeil moyen
           </AppText>
-          <AppText variant="headlineSm" color={Palette.limeFixed}>
-            {avgLabel}
-          </AppText>
+          <View style={styles.avgRow}>
+            <AppText variant="headlineSm" color={Palette.limeFixed}>
+              {avgLabel}
+            </AppText>
+            {trend && <trend.Icon size={18} color={trend.color} />}
+          </View>
         </View>
         <View style={styles.stat} accessible accessibilityLabel={`État moyen : ${fatigueLabel}`}>
           <AppText variant="labelSm" color={Palette.textMuted}>
@@ -107,6 +118,7 @@ const styles = StyleSheet.create({
   stats: { flexDirection: 'row', gap: 8 },
   stat: { flex: 1, gap: 2, backgroundColor: Palette.containerLow, borderRadius: Radius.md, paddingVertical: 10, paddingHorizontal: 12 },
   statDark: { backgroundColor: Palette.obsidian },
+  avgRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   bars: {
     flexDirection: 'row',
     alignItems: 'flex-end',

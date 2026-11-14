@@ -97,7 +97,12 @@ export type SleepWeek = {
   avgSleep: number | null;
   /** Niveau de fatigue le plus fréquent ; à égalité, le plus fatigué. Null si rien n'est noté. */
   usualFatigue: FatigueLevel | null;
+  /** Évolution de la moyenne par rapport aux 7 jours précédents ; null si une des deux semaines est vide. */
+  sleepTrend: 'up' | 'down' | 'stable' | null;
 };
+
+/** En dessous de cet écart (en heures), la moyenne de sommeil est considérée stable. */
+const SLEEP_STABLE_HOURS = 0.25;
 
 export function sleepWeek(logs: DailyLog[], today: string): SleepWeek {
   const byDate = new Map(logs.map((l) => [l.date, l]));
@@ -120,7 +125,13 @@ export function sleepWeek(logs: DailyLog[], today: string): SleepWeek {
     }
   });
 
-  return { nights, avgSleep: average(values(week, (l) => l.sleepHours)), usualFatigue };
+  const avgSleep = average(values(week, (l) => l.sleepHours));
+  const prevSleep = average(values(between(logs, shiftIso(today, -13), shiftIso(today, -7)), (l) => l.sleepHours));
+  const diff = avgSleep !== null && prevSleep !== null ? avgSleep - prevSleep : null;
+  const sleepTrend =
+    diff === null ? null : Math.abs(diff) < SLEEP_STABLE_HOURS ? 'stable' : diff > 0 ? 'up' : 'down';
+
+  return { nights, avgSleep, usualFatigue, sleepTrend };
 }
 
 // ─── Rendez-vous planifiés ──────────────────────────────────────────────────
