@@ -1,6 +1,7 @@
 // Calculs de l'accueil : fonctions pures, sans affichage, à partir des données déjà chargées.
 
-import { DailyLog, PlannedCheckup, ShampooType } from '../types';
+import { FATIGUE_OPTIONS } from '../constants/fatigue';
+import { DailyLog, FatigueLevel, PlannedCheckup, ShampooType } from '../types';
 import { hasFlow } from './cycle';
 import { dayShort, daysBetween, shiftIso } from './dates';
 import type { RecheckReminder } from './labStatus';
@@ -85,41 +86,41 @@ export function findLastConflict(logs: DailyLog[], today: string): DailyLog | un
   return logs.findLast((l) => l.conflictWithHusband && l.date <= today);
 }
 
-// ─── Semaine ────────────────────────────────────────────────────────────────
+// ─── Sommeil ────────────────────────────────────────────────────────────────
 
-export type WeekDay = { date: string; label: string; score: number | null };
+export type SleepNight = { date: string; label: string; hours: number | null };
 
-export type WeekSummary = {
-  days: WeekDay[];
-  /** Jour le plus anxieux (score ≥ 5), null sinon. */
-  peak: WeekDay | null;
-  avgAnxiety: number | null;
+export type SleepWeek = {
+  /** Les 7 derniers jours, aujourd'hui compris (heures notées dans le journal de chaque jour). */
+  nights: SleepNight[];
   /** Heures de sommeil moyennes sur les nuits notées. */
   avgSleep: number | null;
-  throatDays: number;
-  conflictDays: number;
+  /** Niveau de fatigue le plus fréquent ; à égalité, le plus fatigué. Null si rien n'est noté. */
+  usualFatigue: FatigueLevel | null;
 };
 
-/** Les 7 derniers jours, aujourd'hui compris. */
-export function weekSummary(logs: DailyLog[], today: string): WeekSummary {
+export function sleepWeek(logs: DailyLog[], today: string): SleepWeek {
   const byDate = new Map(logs.map((l) => [l.date, l]));
-  const days = Array.from({ length: 7 }, (_, i) => {
+  const nights = Array.from({ length: 7 }, (_, i) => {
     const date = shiftIso(today, i - 6);
-    return { date, label: dayShort(date), score: byDate.get(date)?.anxietyScore ?? null };
+    return { date, label: dayShort(date), hours: byDate.get(date)?.sleepHours ?? null };
   });
-  const peak = days.reduce<WeekDay | null>(
-    (best, d) => (d.score !== null && d.score >= 5 && (!best || d.score > (best.score ?? 0)) ? d : best),
-    null
-  );
   const week = between(logs, shiftIso(today, -6), today);
-  return {
-    days,
-    peak,
-    avgAnxiety: average(values(week, (l) => l.anxietyScore)),
-    avgSleep: average(values(week, (l) => l.sleepHours)),
-    throatDays: week.filter((l) => l.lumpInThroat).length,
-    conflictDays: week.filter((l) => l.conflictWithHusband).length,
-  };
+
+  const counts = new Map<FatigueLevel, number>();
+  week.forEach((l) => l.fatigueLevel && counts.set(l.fatigueLevel, (counts.get(l.fatigueLevel) ?? 0) + 1));
+  let usualFatigue: FatigueLevel | null = null;
+  let best = 0;
+  // Parcours du moins au plus fatigué : `>=` retient le plus fatigué en cas d'égalité
+  FATIGUE_OPTIONS.forEach(({ id }) => {
+    const n = counts.get(id) ?? 0;
+    if (n > 0 && n >= best) {
+      best = n;
+      usualFatigue = id;
+    }
+  });
+
+  return { nights, avgSleep: average(values(week, (l) => l.sleepHours)), usualFatigue };
 }
 
 // ─── Soins capillaires ──────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { FATIGUE_OPTIONS } from '../constants/fatigue';
 import { SHAMPOO_OPTIONS } from '../constants/hairCare';
 import { DockClearance, Palette, Radius, Spacing, Type } from '../constants/theme';
 import {
@@ -54,13 +55,6 @@ interface DailyEntryFormProps {
   /** Contenu affiché en tête du formulaire (défile avec lui). */
   header?: React.ReactNode;
 }
-
-const FATIGUE_OPTIONS: { id: FatigueLevel; label: string }[] = [
-  { id: 'normal', label: 'Normal' },
-  { id: 'légère', label: 'Légère' },
-  { id: 'modérée', label: 'Modérée' },
-  { id: 'importante', label: 'Importante' },
-];
 
 
 const SLEEP_QUICK: number[] = [5, 6, 7, 8, 9];

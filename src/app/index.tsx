@@ -9,13 +9,13 @@ import { DashboardSkeleton } from '../components/home/DashboardSkeleton';
 import { EndPeriodSheet } from '../components/home/EndPeriodSheet';
 import { HairLossCard } from '../components/home/HairLossCard';
 import { KeyMetrics } from '../components/home/KeyMetrics';
+import { SleepCard } from '../components/home/SleepCard';
 import { TodayStatus } from '../components/home/TodayStatus';
 import { UpcomingSection } from '../components/home/UpcomingSection';
-import { WeekCard } from '../components/home/WeekCard';
 import { ScreenHeader } from '../components/ui';
 import { DockClearance, MaxContentWidth, Palette, Spacing } from '../constants/theme';
 import { getCycleStatus, getPeriods, predictNextPeriod } from '../lib/cycle';
-import { findLastConflict, hairChartPoints, hairLossSummary, isDayLogged, lastHairCare, upcomingAgenda, weekSummary } from '../lib/dashboard';
+import { findLastConflict, hairChartPoints, hairLossSummary, isDayLogged, lastHairCare, sleepWeek, upcomingAgenda } from '../lib/dashboard';
 import { todayIso } from '../lib/dates';
 import { actionError } from '../lib/errors';
 import { computeRecheckReminders } from '../lib/labStatus';
@@ -115,7 +115,6 @@ export default function DashboardScreen() {
   const cycleStatus = getCycleStatus(logsRecord, today, { includeDate: true });
   const cyclePrediction = predictNextPeriod(getPeriods(logsRecord));
 
-  const week = weekSummary(logs, today);
   const curePlans = StorageService.getActivePlansForDate(treatmentPlans, today).filter((p) => p.type === 'cure');
   const agenda = upcomingAgenda(checkups, computeRecheckReminders(labTests, labMarkers, today), today);
 
@@ -144,7 +143,7 @@ export default function DashboardScreen() {
 
         <HairLossCard points={hairChartPoints(logs)} />
 
-        <WeekCard week={week} today={today} peakLog={week.peak ? logsByDate.get(week.peak.date) : undefined} />
+        <SleepCard sleep={sleepWeek(logs, today)} today={today} />
 
         <UpcomingSection
           agenda={agenda}
