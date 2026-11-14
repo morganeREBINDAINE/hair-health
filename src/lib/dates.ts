@@ -47,6 +47,9 @@ export const longDay = (iso: string) =>
 /** « 02/10/2026 » */
 export const frDate = (iso: string) => iso.split('-').reverse().join('/');
 
+/** « 02/10/26 » */
+export const frDateShort = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}`;
+
 export const daysBetween = (fromIso: string, toIso: string) =>
   Math.round((parse(toIso).getTime() - parse(fromIso).getTime()) / 86400000);
 

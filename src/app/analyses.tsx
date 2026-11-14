@@ -7,9 +7,8 @@ import { Toast } from '../lib/toast';
 import { actionError } from '../lib/errors';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CalendarClock } from 'lucide-react-native';
 import { DockClearance, Elevation, Palette, Spacing } from '../constants/theme';
-import { AppText, ImageTabBar, PillButton, ScreenHeader, SkeletonCard } from '../components/ui';
+import { ImageTabBar, PillButton, ScreenHeader, Segmented, SkeletonCard } from '../components/ui';
 import { sharedStyles } from '../components/analyses/shared';
 import { MoleculesTab } from '../components/analyses/MoleculesTab';
 import { BloodTestsTab } from '../components/analyses/BloodTestsTab';
@@ -19,15 +18,33 @@ import { BloodTestSheet } from '../components/analyses/BloodTestSheet';
 import { ExamSheet } from '../components/analyses/ExamSheet';
 import { PlanningSheet, checkupLabel } from '../components/analyses/Planning';
 
-type AnalysesTab = 'molecules' | 'tests' | 'exams' | 'planned';
+type AnalysesTab = 'molecules' | 'tests' | 'exams';
+/** Vue des onglets Prises de sang et Examens : résultats enregistrés ou rendez-vous planifiés. */
+type SubView = 'done' | 'planned';
 
 const TAB_OPTIONS: { id: AnalysesTab; label: string; image: number }[] = [
   { id: 'molecules', label: 'Molécules', image: require('../../assets/images/analyses/molecules.jpg') },
   { id: 'tests', label: 'Prises de sang', image: require('../../assets/images/analyses/blood.jpg') },
   { id: 'exams', label: 'Examens', image: require('../../assets/images/analyses/exams.jpg') },
-  { id: 'planned', label: 'Planifiés', image: require('../../assets/images/analyses/planned.jpg') },
 ];
 const TABS = TAB_OPTIONS.map((t) => t.id);
+
+const VIEW_OPTIONS: Record<'tests' | 'exams', { id: SubView; label: string }[]> = {
+  tests: [
+    { id: 'done', label: 'Mes analyses' },
+    { id: 'planned', label: 'À planifier' },
+  ],
+  exams: [
+    { id: 'done', label: 'Mes examens' },
+    { id: 'planned', label: 'À planifier' },
+  ],
+};
+const VIEWS: SubView[] = ['done', 'planned'];
+
+const FAB_LABEL: Record<'tests' | 'exams', Record<SubView, string>> = {
+  tests: { done: 'Ajouter une prise de sang', planned: 'Planifier une prise de sang' },
+  exams: { done: 'Ajouter un examen', planned: 'Planifier un examen' },
+};
 
 /** Hauteur du dock de navigation flottant (bouton 48 + padding 2 × 5), voir `_layout.tsx`. */
 const DOCK_HEIGHT = 58;
@@ -36,10 +53,11 @@ const DOCK_HEIGHT = 58;
 type SheetState<T> = { session: number; editing: T | null; fromPlan: PlannedCheckup | null };
 
 export default function AnalysesScreen() {
-  const params = useLocalSearchParams<{ tab?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; view?: string }>();
   const insets = useSafeAreaInsets();
   const initialSyncing = useInitialSyncing();
   const [activeTab, setActiveTab] = useState<AnalysesTab>('molecules');
+  const [views, setViews] = useState<Record<'tests' | 'exams', SubView>>({ tests: 'done', exams: 'done' });
   const [markers, setMarkers] = useState<LabMarkerDefinition[]>([]);
   const [labTests, setLabTests] = useState<LabTest[]>([]);
   const [exams, setExams] = useState<MedicalExam[]>([]);
@@ -80,12 +98,17 @@ export default function AnalysesScreen() {
   useFocusEffect(
     useCallback(() => {
       loadAll();
-      // Ouverture directe d'un onglet depuis l'accueil (/analyses?tab=exams), puis on consomme le paramètre
+      // Ouverture directe d'un onglet depuis l'accueil (/analyses?tab=tests&view=planned), puis on consomme les paramètres
       if (params.tab && (TABS as string[]).includes(params.tab)) {
-        setActiveTab(params.tab as AnalysesTab);
-        router.setParams({ tab: undefined });
+        const tab = params.tab as AnalysesTab;
+        setActiveTab(tab);
+        if (tab !== 'molecules') {
+          const view: SubView = params.view && (VIEWS as string[]).includes(params.view) ? (params.view as SubView) : 'done';
+          setViews((v) => ({ ...v, [tab]: view }));
+        }
+        router.setParams({ tab: undefined, view: undefined });
       }
-    }, [loadAll, params.tab]),
+    }, [loadAll, params.tab, params.view]),
   );
 
   const nextSession = () => {
@@ -132,7 +155,13 @@ export default function AnalysesScreen() {
   };
 
   const pending = checkups.filter((c) => !c.done);
-  const hasFab = activeTab === 'tests' || activeTab === 'exams';
+  const subTab = activeTab === 'molecules' ? null : activeTab;
+  const view = subTab ? views[subTab] : null;
+
+  const onFabPress = () => {
+    if (subTab === 'tests') return view === 'planned' ? openPlan('blood') : openBlood(null);
+    if (subTab === 'exams') return view === 'planned' ? openPlan('exam') : openExam(null);
+  };
 
   return (
     <View style={styles.screen}>
@@ -147,40 +176,19 @@ export default function AnalysesScreen() {
           style={styles.tabsBleed}
           contentContainerStyle={styles.tabsContent}
         />
-        {activeTab === 'planned' && (
-          // Côte à côte : le libellé passe sur deux lignes plutôt que d'être tronqué
-          <View style={styles.actions}>
-            <PillButton
-              label="Planifier prise de sang"
-              icon={CalendarClock}
-              compact
-              disabled={loading}
-              onPress={() => openPlan('blood')}
-              style={styles.planBtn}
-            />
-            <PillButton
-              label="Planifier examen"
-              icon={CalendarClock}
-              variant="ghost"
-              compact
-              disabled={loading}
-              onPress={() => openPlan('exam')}
-              style={styles.planBtn}
-            />
-          </View>
+        {subTab && view && (
+          <Segmented
+            variant="outline"
+            options={VIEW_OPTIONS[subTab]}
+            value={view}
+            onChange={(v) => setViews((prev) => ({ ...prev, [subTab]: v }))}
+          />
         )}
       </View>
       <ScrollView
-        contentContainerStyle={[sharedStyles.content, hasFab && styles.contentWithFab]}
+        contentContainerStyle={[sharedStyles.content, subTab && styles.contentWithFab]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
-        {activeTab === 'molecules' && (
-          <AppText variant="bodyMd" color={Palette.textMuted}>
-            Valeurs cibles optimales pour stimuler le follicule et soutenir la repousse — souvent plus exigeantes que
-            les normes de laboratoire.
-          </AppText>
-        )}
-
         {activeTab === 'molecules' &&
           (loading ? (
             <>
@@ -190,7 +198,7 @@ export default function AnalysesScreen() {
           ) : (
             <MoleculesTab markers={markers} labTests={labTests} onMarkersChange={setMarkers} />
           ))}
-        {activeTab === 'tests' && (
+        {activeTab === 'tests' && view === 'done' && (
           <BloodTestsTab
             loading={loading}
             markers={markers}
@@ -199,7 +207,7 @@ export default function AnalysesScreen() {
             onEditTest={(t) => openBlood(t)}
           />
         )}
-        {activeTab === 'exams' && (
+        {activeTab === 'exams' && view === 'done' && (
           <ExamsTab
             loading={loading}
             exams={exams}
@@ -207,9 +215,10 @@ export default function AnalysesScreen() {
             onEditExam={(e) => openExam(e)}
           />
         )}
-        {activeTab === 'planned' && (
+        {subTab && view === 'planned' && (
           <PlannedTab
             loading={loading}
+            kind={subTab === 'tests' ? 'blood' : 'exam'}
             planned={pending}
             markers={markers}
             onComplete={completePlan}
@@ -219,12 +228,12 @@ export default function AnalysesScreen() {
         )}
       </ScrollView>
 
-      {hasFab && (
+      {subTab && view && (
         <PillButton
-          label={activeTab === 'tests' ? 'Ajouter une prise de sang' : 'Ajouter un examen'}
+          label={FAB_LABEL[subTab][view]}
           variant="lime"
           disabled={loading}
-          onPress={() => (activeTab === 'tests' ? openBlood(null) : openExam(null))}
+          onPress={onFabPress}
           style={[styles.fab, { bottom: Math.max(insets.bottom, 12) + DOCK_HEIGHT + 14 }]}
         />
       )}
@@ -280,8 +289,6 @@ const styles = StyleSheet.create({
   },
   tabsBleed: { marginHorizontal: -Spacing.margin },
   tabsContent: { paddingHorizontal: Spacing.margin },
-  actions: { flexDirection: 'row', gap: 10 },
-  planBtn: { flex: 1, height: 'auto', minHeight: 48, paddingVertical: 8, paddingHorizontal: 14 },
   // Le bouton flottant ne doit pas masquer la dernière carte
   contentWithFab: { paddingBottom: DockClearance + 64 },
   fab: { position: 'absolute', right: Spacing.margin, height: 62, paddingHorizontal: 28, ...Elevation.floating },

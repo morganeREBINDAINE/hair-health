@@ -436,20 +436,45 @@ export function SectionHeader({
   );
 }
 
-/** Contrôle segmenté pilule (ex. Oui / Non, 1 / 2 gél.). */
+/** Contrôle segmenté : pilule (ex. Oui / Non, 1 / 2 gél.) ou `outline`, bouton bordé en parties égales
+ * (ex. Mes analyses / À planifier). */
 export function Segmented<T extends string>({
   options,
   value,
   onChange,
   style,
   size,
+  variant = 'pill',
 }: {
   options: { id: T; label: string }[];
   value: T | null;
   onChange: (v: T) => void;
   style?: StyleProp<ViewStyle>;
   size?: 'sm' | 'lg';
+  variant?: 'pill' | 'outline';
 }) {
+  if (variant === 'outline') {
+    return (
+      <View style={[styles.segmentedOutline, style]} accessibilityRole="tablist">
+        {options.map((o, i) => {
+          const active = o.id === value;
+          return (
+            <Pressable
+              key={o.id}
+              onPress={() => onChange(o.id)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              style={[styles.segmentOutline, i > 0 && styles.segmentOutlineDivider, active && styles.segmentOutlineActive]}>
+              <Text style={[Type.labelMd, { color: active ? Palette.primary : Palette.textVariant }]} numberOfLines={1}>
+                {o.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
+
   const lg = size === 'lg';
   return (
     <View style={[styles.segmented, style]}>
@@ -648,6 +673,18 @@ const styles = StyleSheet.create({
   },
   segmentLg: { paddingHorizontal: 18, paddingVertical: 10 },
   segmentActive: { backgroundColor: Palette.obsidian },
+  segmentedOutline: {
+    flexDirection: 'row',
+    height: 48,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: Palette.outlineVariant,
+    backgroundColor: Palette.card,
+    overflow: 'hidden',
+  },
+  segmentOutline: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  segmentOutlineDivider: { borderLeftWidth: 1, borderLeftColor: Palette.outlineVariant },
+  segmentOutlineActive: { backgroundColor: Palette.limeSoft },
   // Marge verticale : laisse de la place à l'ombre des cartes, sinon rognée par le ScrollView
   imageTabs: { flexDirection: 'row', gap: 8, paddingVertical: 6 },
   imageTab: {

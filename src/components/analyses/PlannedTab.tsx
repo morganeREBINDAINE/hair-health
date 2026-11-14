@@ -1,12 +1,13 @@
 import { CalendarClock } from 'lucide-react-native';
 import { Palette } from '../../constants/theme';
-import { LabMarkerDefinition, PlannedCheckup } from '../../types';
+import { CheckupKind, LabMarkerDefinition, PlannedCheckup } from '../../types';
 import { AppText, Card, IconCircle, SkeletonCard } from '../ui';
 import { PlannedSection } from './Planning';
 
-/** Prises de sang et examens planifiés non réalisés, du plus proche au plus lointain. */
+/** Prises de sang ou examens planifiés non réalisés, du plus proche au plus lointain. */
 export function PlannedTab({
   loading,
+  kind,
   planned,
   markers,
   onComplete,
@@ -14,6 +15,7 @@ export function PlannedTab({
   onDelete,
 }: {
   loading: boolean;
+  kind: CheckupKind;
   planned: PlannedCheckup[];
   markers: LabMarkerDefinition[];
   onComplete: (item: PlannedCheckup) => void;
@@ -29,21 +31,23 @@ export function PlannedTab({
     );
   }
 
-  if (planned.length === 0) {
+  const items = planned.filter((c) => c.kind === kind).sort((a, b) => a.date.localeCompare(b.date));
+
+  if (items.length === 0) {
     return (
       <Card style={{ alignItems: 'center', gap: 10, paddingVertical: 32 }}>
         <IconCircle icon={CalendarClock} size={52} />
         <AppText variant="headlineSm">Rien de planifié</AppText>
         <AppText variant="bodySm" color={Palette.textMuted} style={{ textAlign: 'center' }}>
-          Appuie sur « Planifier » pour programmer une prise de sang ou un examen.
+          {kind === 'blood'
+            ? 'Appuie sur « Planifier une prise de sang » pour programmer ton prochain bilan.'
+            : 'Appuie sur « Planifier un examen » pour programmer une radio ou une échographie.'}
         </AppText>
       </Card>
     );
   }
 
-  const byDate = [...planned].sort((a, b) => a.date.localeCompare(b.date));
-
   return (
-    <PlannedSection items={byDate} markers={markers} onComplete={onComplete} onEdit={onEdit} onDelete={onDelete} />
+    <PlannedSection items={items} markers={markers} onComplete={onComplete} onEdit={onEdit} onDelete={onDelete} />
   );
 }

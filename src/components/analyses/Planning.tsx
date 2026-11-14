@@ -144,9 +144,6 @@ export function PlannedSection({
   const today = todayIso();
   return (
     <View style={{ gap: 10 }}>
-      <AppText variant="labelSm" color={Palette.textVariant} style={{ paddingLeft: 8 }}>
-        PLANIFIÉ
-      </AppText>
       {items.map((item) => {
         const days = daysBetween(today, item.date);
         const when = days < 0 ? `En retard de ${-days} j` : days === 0 ? "Aujourd'hui" : `Dans ${days} j`;

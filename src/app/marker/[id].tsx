@@ -68,15 +68,7 @@ export default function MarkerDetailScreen() {
     setSavingFrequency(true);
     try {
       const recheckMonths = next === 'none' ? null : (Number(next) as 6 | 12);
-      await StorageService.saveLabMarker({ ...marker, recheckMonths });
-      // Contrôle déjà échu : le rendez-vous de prise de sang est créé tout de suite
-      try {
-        await StorageService.ensureAutoCheckups(todayIso());
-      } catch (e) {
-        console.error('[marker] rendez-vous automatique', e);
-        Toast.error(`Suivi enregistré, mais ${actionError(e, 'créer le rendez-vous automatique').toLowerCase()}`);
-      }
-      const markers = await StorageService.getLabMarkers();
+      const markers = await StorageService.saveLabMarker({ ...marker, recheckMonths });
       setMarker(markers.find((m) => m.id === marker.id) ?? null);
     } catch (e) {
       console.error('[marker] fréquence de suivi', e);

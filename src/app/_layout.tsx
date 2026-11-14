@@ -18,9 +18,9 @@ import type { Session } from '@supabase/supabase-js';
 import { StorageService } from '../services/storageService';
 import { supabase, createSessionFromUrl } from '../lib/supabase';
 import { Toast } from '../lib/toast';
-import { todayIso } from '../lib/dates';
 import { SyncEvent } from '../lib/syncEvent';
 import LoginScreen from '../components/LoginScreen';
+import { QuickAddMenu } from '../components/QuickAddMenu';
 import { Palette, Elevation, Type } from '../constants/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -37,9 +37,11 @@ const TAB_LABELS: Record<string, string> = {
 function FloatingDock({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const visibleRoutes = state.routes.filter((route) => route.name in TAB_LABELS);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   return (
     <View pointerEvents="box-none" style={[dockStyles.wrapper, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      <QuickAddMenu visible={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
       <View style={dockStyles.dock}>
         {visibleRoutes.map((route) => {
           const index = state.routes.indexOf(route);
@@ -55,11 +57,12 @@ function FloatingDock({ state, descriptors, navigation }: BottomTabBarProps) {
           };
 
           if (isCenter) {
+            // Le bouton + ouvre le menu d'ajout ; le journal reste accessible depuis ce menu
             return (
               <Pressable
                 key={route.key}
-                onPress={onPress}
-                accessibilityLabel={TAB_LABELS[route.name]}
+                onPress={() => setQuickAddOpen(true)}
+                accessibilityLabel="Ajouter"
                 style={({ pressed }) => [
                   dockStyles.center,
                   isFocused && dockStyles.centerFocused,
@@ -262,12 +265,6 @@ function AppRoot() {
         try {
           const { synced } = await StorageService.syncFromCloud(newSession.user.id);
           if (synced > 0) console.log(`[Sync] ${synced} entrée(s) restaurée(s) depuis le cloud`);
-          try {
-            await StorageService.ensureAutoCheckups(todayIso());
-          } catch (e) {
-            console.error('[Sync] rendez-vous automatiques', e);
-            Toast.error('Impossible de planifier automatiquement les prises de sang');
-          }
         } catch {
           Toast.error('Connexion internet requise pour récupérer vos données');
         } finally {

@@ -23,7 +23,7 @@ import { computeRecheckReminders } from '../lib/labStatus';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
 import { StorageService } from '../services/storageService';
-import { DailyLog, LabMarkerDefinition, LabTest, PlannedCheckup } from '../types';
+import { CheckupKind, DailyLog, LabMarkerDefinition, LabTest, PlannedCheckup } from '../types';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -94,7 +94,8 @@ export default function DashboardScreen() {
     setCompleting({ item, session: completeSession + 1 });
   };
   const openEntry = (date?: string) => router.push(date ? { pathname: '/entry', params: { date } } : '/entry');
-  const openPlanned = () => router.push({ pathname: '/analyses', params: { tab: 'planned' } });
+  const openPlanned = (kind: CheckupKind = 'blood') =>
+    router.push({ pathname: '/analyses', params: { tab: kind === 'blood' ? 'tests' : 'exams', view: 'planned' } });
 
   const saveEndPeriod = async (date: string, time: string) => {
     try {
@@ -157,7 +158,8 @@ export default function DashboardScreen() {
           agenda={plannedAgenda(checkups, today)}
           markers={labMarkers}
           today={today}
-          onSeeAll={openPlanned}
+          onSeeAll={() => openPlanned('blood')}
+          onOpen={(item) => openPlanned(item.kind)}
           onDone={openCompletion}
         />
 

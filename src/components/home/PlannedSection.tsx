@@ -14,13 +14,16 @@ export function PlannedSection({
   markers,
   today,
   onSeeAll,
+  onOpen,
   onDone,
 }: {
   agenda: PlannedAgenda;
   markers: LabMarkerDefinition[];
   today: string;
-  /** Ouvre l'onglet « Planifiés » des Analyses. */
+  /** Ouvre les prises de sang planifiées des Analyses. */
   onSeeAll: () => void;
+  /** Ouvre la vue « À planifier » correspondant au type du rendez-vous. */
+  onOpen: (item: PlannedCheckup) => void;
   onDone: (item: PlannedCheckup) => void;
 }) {
   const { planned, nextLater } = agenda;
@@ -51,7 +54,7 @@ export function PlannedSection({
           label={checkupLabel(planned[0], markers)}
           today={today}
           single
-          onOpen={onSeeAll}
+          onOpen={() => onOpen(planned[0])}
           onDone={() => onDone(planned[0])}
         />
       ) : planned.length > 1 ? (
@@ -63,7 +66,7 @@ export function PlannedSection({
               label={checkupLabel(c, markers)}
               today={today}
               single={false}
-              onOpen={onSeeAll}
+              onOpen={() => onOpen(c)}
               onDone={() => onDone(c)}
             />
           ))}
