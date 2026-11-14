@@ -228,7 +228,12 @@ export default function CalendarScreen() {
   const predictedShown = isShown(sel, 'cycle', PREDICTED_KEY);
   const showPredicted = predictedShown && isPredicted(selectedDate);
 
-  const anyVisible = showPredicted || showLoss || shownItems.length > 0;
+  // La fatigue n'a ni pastille ni sous-filtre : visible en vue « Tout » et sous « Sommeil › Tous »
+  const showFatigue =
+    !!selectedLog?.fatigueLevel && (sel.category === 'all' || (sel.category === 'sleep' && sel.subKeys.length === 0));
+  const showSleep = shown('sleep') || showFatigue;
+
+  const anyVisible = showPredicted || showLoss || showFatigue || shownItems.length > 0;
 
   return (
     <View style={styles.screen}>
@@ -536,11 +541,11 @@ export default function CalendarScreen() {
             />
           )}
 
-          {!initialSyncing && shown('sleep') && selectedLog && (
+          {!initialSyncing && showSleep && selectedLog && (
             <SmallEventCard
               icon={Moon}
               color={CategoryColors.sleep}
-              title="Sommeil & fatigue"
+              title="Sommeil"
               subtitle={[
                 selectedLog.sleepHours != null && `${selectedLog.sleepHours} h de sommeil`,
                 selectedLog.fatigueLevel && `Fatigue ${selectedLog.fatigueLevel}`,

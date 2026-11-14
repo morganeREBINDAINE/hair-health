@@ -17,7 +17,7 @@ export const CATEGORY_LABELS: Record<CalendarCategory, { chip: string; legend: s
   meds: { chip: 'Traitements', legend: 'Traitements' },
   hair: { chip: 'Cheveux', legend: 'Cheveux' },
   emotion: { chip: 'Émotionnel', legend: 'Émotionnel' },
-  sleep: { chip: 'Fatigue', legend: 'Sommeil & fatigue' },
+  sleep: { chip: 'Sommeil', legend: 'Sommeil' },
   blood: { chip: 'Bilan', legend: 'Bilan sanguin' },
 };
 
@@ -50,6 +50,9 @@ export const UNWASHED_KEY = 'unwashed';
 export const medKey = (name: string) => normalizeSearch(name);
 export const medItemKey = (name: string) => `med:${medKey(name)}`;
 
+/** Tranche de sommeil : jusqu'à 6 h, plus de 6 h jusqu'à 8 h inclus, plus de 8 h. */
+export const sleepKey = (hours: number) => (hours <= 6 ? 'sleep_short' : hours <= 8 ? 'sleep_mid' : 'sleep_long');
+
 const SHAMPOO_COLORS = ['#FFB224', '#30A46C', '#E5484D', '#8E4EC6'];
 
 /** Sous-filtres proposés sous chaque catégorie (le cycle n'en a pas). */
@@ -71,9 +74,9 @@ const STATIC_SUB_FILTERS: Record<Exclude<CalendarCategory, 'meds'>, SubFilter[]>
     { key: 'conflict', label: 'Dispute', color: '#E5484D' },
   ],
   sleep: [
-    { key: 'sleep', label: 'Sommeil renseigné', color: '#3E63DD' },
-    { key: 'fatigue_moderate', label: 'Fatigue modérée', color: '#FFB224' },
-    { key: 'fatigue_high', label: 'Fatigue importante', color: '#E5484D' },
+    { key: 'sleep_short', label: '6 h et −', color: '#E5484D' },
+    { key: 'sleep_mid', label: '7 à 8 h', color: '#3E63DD' },
+    { key: 'sleep_long', label: '8 h et +', color: '#30A46C' },
   ],
   blood: [{ key: 'labtest', label: 'Prise de sang', color: CategoryColors.blood }],
 };
@@ -143,9 +146,8 @@ export function dayItems(log: DailyLog | undefined, hasBlood: boolean, filters: 
     if (log.lumpInThroat) add('emotion', 'lump');
     if (log.conflictWithHusband) add('emotion', 'conflict');
 
-    if (log.sleepHours != null) add('sleep', 'sleep');
-    if (log.fatigueLevel === 'modérée') add('sleep', 'fatigue_moderate');
-    if (log.fatigueLevel === 'importante') add('sleep', 'fatigue_high');
+    // La fatigue n'est pas une pastille : elle reste visible dans le détail du jour
+    if (log.sleepHours != null) add('sleep', sleepKey(log.sleepHours));
   }
   if (hasBlood) add('blood', 'labtest');
   return items;
