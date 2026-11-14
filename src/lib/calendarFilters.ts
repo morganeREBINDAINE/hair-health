@@ -3,7 +3,7 @@
 import { DailyLog, MedicationDefinition } from '../types';
 import { CategoryColors, HairItemColors, SubItemColors } from '../constants/theme';
 import { SHAMPOO_OPTIONS } from '../constants/hairCare';
-import { hasFlow } from './cycle';
+import { hasMenstrualData } from './cycle';
 import { normalizeSearch } from './labStatus';
 
 export type CalendarCategory = 'cycle' | 'meds' | 'hair' | 'emotion' | 'sleep' | 'blood';
@@ -34,29 +34,34 @@ export interface DayItem {
   category: CalendarCategory;
   key: string;
   color: string;
+  /**
+   * Élément discret (ex. « Pas lavés ») : ignoré en vue « Tout » (ni pastille, ni compte, ni carte),
+   * affiché seulement quand sa catégorie est choisie.
+   */
+  passive?: boolean;
 }
 
 export const PREDICTED_KEY = 'predicted';
+export const PERIOD_KEY = 'period';
+export const WASH_KEY = 'wash';
+export const UNWASHED_KEY = 'unwashed';
 
 /** Clé de comparaison d'un traitement : les journaux ne stockent que le nom. */
 export const medKey = (name: string) => normalizeSearch(name);
 export const medItemKey = (name: string) => `med:${medKey(name)}`;
 
+const SHAMPOO_COLORS = ['#FFB224', '#30A46C', '#E5484D', '#8E4EC6'];
+
+/** Sous-filtres proposés sous chaque catégorie (le cycle n'en a pas). */
 const STATIC_SUB_FILTERS: Record<Exclude<CalendarCategory, 'meds'>, SubFilter[]> = {
-  cycle: [
-    { key: 'flow', label: 'Règles', color: CategoryColors.cycle },
-    { key: 'pain', label: 'Douleur', color: '#8E4EC6' },
-    { key: 'end', label: 'Fin des règles', color: '#F76B15' },
-    { key: PREDICTED_KEY, label: 'Règles prévues', color: CategoryColors.cycle, swatch: 'band' },
-  ],
+  cycle: [],
   hair: [
-    { key: 'wash', label: 'Cheveux lavés', color: HairItemColors.wash },
+    { key: UNWASHED_KEY, label: 'Pas lavés', color: HairItemColors.unwashed },
     ...SHAMPOO_OPTIONS.map((o, i) => ({
       key: `shampoo:${o.id}`,
       label: o.label,
-      color: ['#FFB224', '#30A46C', '#E5484D', '#8E4EC6'][i % 4],
+      color: SHAMPOO_COLORS[i % SHAMPOO_COLORS.length],
     })),
-    { key: 'loss', label: 'Chute', color: HairItemColors.loss },
     { key: 'haircut', label: 'Coupe', color: HairItemColors.haircut },
     { key: 'henna', label: 'Henné', color: HairItemColors.henna },
   ],
@@ -73,8 +78,23 @@ const STATIC_SUB_FILTERS: Record<Exclude<CalendarCategory, 'meds'>, SubFilter[]>
   blood: [{ key: 'labtest', label: 'Prise de sang', color: CategoryColors.blood }],
 };
 
+/** Légende du cycle quand il est choisi : sans sous-filtre, juste les règles et leur prévision. */
+const CYCLE_LEGEND: SubFilter[] = [
+  { key: PERIOD_KEY, label: 'Règles', color: CategoryColors.cycle },
+  { key: PREDICTED_KEY, label: 'Règles prévues', color: CategoryColors.cycle, swatch: 'band' },
+];
+
+/** Couleurs des éléments sans sous-filtre (lavage sans type de shampoing précisé). */
+const EXTRA_COLORS: Record<string, string> = {
+  [PERIOD_KEY]: CategoryColors.cycle,
+  [WASH_KEY]: HairItemColors.wash,
+};
+
 export interface CalendarFilters {
+  /** Sous-filtres sélectionnables (vide = pas de deuxième rangée). */
   subFilters: Record<CalendarCategory, SubFilter[]>;
+  /** Légende affichée quand la catégorie est choisie. */
+  legend: Record<CalendarCategory, SubFilter[]>;
   /** Traitements masqués du calendrier (clé `medKey`). */
   hiddenMeds: Set<string>;
 }
@@ -90,20 +110,20 @@ export function buildCalendarFilters(medications: MedicationDefinition[]): Calen
       const key = medItemKey(m.name);
       if (!meds.has(key)) meds.set(key, { key, label: m.name, color: SubItemColors[meds.size % SubItemColors.length] });
     });
-  return { subFilters: { ...STATIC_SUB_FILTERS, meds: [...meds.values()] }, hiddenMeds };
+  const subFilters = { ...STATIC_SUB_FILTERS, meds: [...meds.values()] };
+  return { subFilters, legend: { ...subFilters, cycle: CYCLE_LEGEND }, hiddenMeds };
 }
 
 /** Éléments présents un jour donné, dans l'ordre des catégories. Les règles prévues sont gérées à part. */
 export function dayItems(log: DailyLog | undefined, hasBlood: boolean, filters: CalendarFilters): DayItem[] {
   const colorOf = (category: CalendarCategory, key: string) =>
-    filters.subFilters[category].find((s) => s.key === key)?.color ?? CategoryColors[category];
+    filters.subFilters[category].find((s) => s.key === key)?.color ?? EXTRA_COLORS[key] ?? CategoryColors[category];
   const items: DayItem[] = [];
-  const add = (category: CalendarCategory, key: string) => items.push({ category, key, color: colorOf(category, key) });
+  const add = (category: CalendarCategory, key: string, passive?: boolean) =>
+    items.push({ category, key, color: colorOf(category, key), ...(passive && { passive }) });
 
   if (log) {
-    if (hasFlow(log)) add('cycle', 'flow');
-    if (hasFlow(log) && log.menstrualPain) add('cycle', 'pain');
-    if (log.menstrualEndedAt != null) add('cycle', 'end');
+    if (hasMenstrualData(log)) add('cycle', PERIOD_KEY);
 
     const seenMeds = new Set<string>();
     for (const m of log.medications ?? []) {
@@ -113,11 +133,9 @@ export function dayItems(log: DailyLog | undefined, hasBlood: boolean, filters: 
       add('meds', medItemKey(m.name));
     }
 
-    if (log.hairWashDone) {
-      add('hair', 'wash');
-      if (log.shampooType) add('hair', `shampoo:${log.shampooType}`);
-    }
-    if (log.hairLossAmount != null) add('hair', 'loss');
+    // La chute de cheveux n'est pas une pastille : elle reste visible dans le détail du jour
+    if (log.hairWashDone) add('hair', log.shampooType ? `shampoo:${log.shampooType}` : WASH_KEY);
+    else add('hair', UNWASHED_KEY, true);
     if (log.haircutDone) add('hair', 'haircut');
     if (log.hennaDone) add('hair', 'henna');
 
@@ -145,9 +163,15 @@ export function isShown(sel: FilterSelection, category: CalendarCategory, key: s
   return sel.subKeys.length === 0 || sel.subKeys.includes(key);
 }
 
-/** Catégories distinctes présentes, dans l'ordre d'affichage. */
+/** Vrai si l'élément est affiché pour la sélection (les éléments discrets sont ignorés en vue « Tout »). */
+export function isItemShown(sel: FilterSelection, item: DayItem): boolean {
+  if (item.passive && sel.category === 'all') return false;
+  return isShown(sel, item.category, item.key);
+}
+
+/** Catégories distinctes présentes (hors éléments discrets), dans l'ordre d'affichage. */
 export function categoriesOf(items: DayItem[]): CalendarCategory[] {
-  return CATEGORY_ORDER.filter((c) => items.some((i) => i.category === c));
+  return CATEGORY_ORDER.filter((c) => items.some((i) => i.category === c && !i.passive));
 }
 
 /**
@@ -156,5 +180,14 @@ export function categoriesOf(items: DayItem[]): CalendarCategory[] {
  */
 export function dayDots(items: DayItem[], sel: FilterSelection): { key: string; color: string }[] {
   if (sel.category === 'all') return categoriesOf(items).map((c) => ({ key: c, color: CategoryColors[c] }));
-  return items.filter((i) => isShown(sel, i.category, i.key)).map((i) => ({ key: i.key, color: i.color }));
+  return items.filter((i) => isItemShown(sel, i)).map((i) => ({ key: i.key, color: i.color }));
+}
+
+/** Dernier jour de lavage strictement avant `iso`, null si aucun. */
+export function lastWashBefore(logs: Record<string, DailyLog>, iso: string): string | null {
+  let last: string | null = null;
+  for (const [date, log] of Object.entries(logs)) {
+    if (log.hairWashDone && date < iso && (!last || date > last)) last = date;
+  }
+  return last;
 }

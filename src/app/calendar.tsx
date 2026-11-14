@@ -27,17 +27,21 @@ import { DailyLog, LabTest, MedicationDefinition } from '../types';
 import { AppText, Badge, Card, Chip, IconCircle, PillButton, ScreenHeader, SkeletonCard } from '../components/ui';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
-import { todayIso, shiftIso, dayShort, dayNum, monthTitle, longDay, frDate } from '../lib/dates';
+import { todayIso, shiftIso, dayShort, dayNum, monthTitle, longDay, frDate, daysBetween } from '../lib/dates';
 import { flowLabel, getPeriods, hasMenstrualData, predictNextPeriod } from '../lib/cycle';
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
   PREDICTED_KEY,
+  UNWASHED_KEY,
+  WASH_KEY,
   buildCalendarFilters,
   categoriesOf,
   dayDots,
   dayItems,
+  isItemShown,
   isShown,
+  lastWashBefore,
   medItemKey,
   type CalendarCategory,
   type CategoryFilter,
@@ -111,7 +115,7 @@ export default function CalendarScreen() {
   const selectedBlood = bloodByDate.get(selectedDate);
   const selectedItems = dayItems(selectedLog, !!selectedBlood, filters);
   const selectedCatCount = categoriesOf(selectedItems).length;
-  const shownItems = selectedItems.filter((i) => isShown(sel, i.category, i.key));
+  const shownItems = selectedItems.filter((i) => isItemShown(sel, i));
   const shown = (category: CalendarCategory, key?: string) =>
     shownItems.some((i) => i.category === category && (key === undefined || i.key === key));
   const itemColor = (category: CalendarCategory, key: string) =>
@@ -180,7 +184,7 @@ export default function CalendarScreen() {
     </View>
   );
 
-  const legendItems = sel.category === 'all' ? CATEGORY_LEGEND : subFilters;
+  const legendItems = sel.category === 'all' ? CATEGORY_LEGEND : filters.legend[sel.category];
   const colorLegend = legendItems.length > 0 && (
     <View style={styles.legendRow}>
       {legendItems.map((item) => {
@@ -208,8 +212,14 @@ export default function CalendarScreen() {
   );
 
   const showPeriod = shown('cycle');
-  const showWash = !!selectedLog?.hairWashDone && shownItems.some((i) => i.key === 'wash' || i.key.startsWith('shampoo:'));
-  const showLoss = shown('hair', 'loss') && selectedLog?.hairLossAmount != null;
+  const showWash =
+    !!selectedLog?.hairWashDone && shownItems.some((i) => i.key === WASH_KEY || i.key.startsWith('shampoo:'));
+  // La chute n'a ni pastille ni sous-filtre : visible en vue « Tout » et sous « Cheveux › Tous »
+  const showLoss =
+    selectedLog?.hairLossAmount != null &&
+    (sel.category === 'all' || (sel.category === 'hair' && sel.subKeys.length === 0));
+  const showUnwashed = shown('hair', UNWASHED_KEY);
+  const lastWash = showUnwashed ? lastWashBefore(logs, selectedDate) : null;
 
   // Fenêtre des prochaines règles prévues (jours sans saisie de règles uniquement)
   const prediction = predictNextPeriod(getPeriods(logs));
@@ -218,7 +228,7 @@ export default function CalendarScreen() {
   const predictedShown = isShown(sel, 'cycle', PREDICTED_KEY);
   const showPredicted = predictedShown && isPredicted(selectedDate);
 
-  const anyVisible = showPredicted || shownItems.length > 0;
+  const anyVisible = showPredicted || showLoss || shownItems.length > 0;
 
   return (
     <View style={styles.screen}>
@@ -444,6 +454,20 @@ export default function CalendarScreen() {
                 </View>
               )}
             </Card>
+          )}
+
+          {!initialSyncing && showUnwashed && (
+            <SmallEventCard
+              icon={ShowerHead}
+              color={itemColor('hair', UNWASHED_KEY)}
+              title="Cheveux non lavés"
+              subtitle={
+                lastWash
+                  ? `${daysBetween(lastWash, selectedDate)} jour${daysBetween(lastWash, selectedDate) > 1 ? 's' : ''} depuis le dernier lavage (${frDate(lastWash)})`
+                  : 'Aucun lavage enregistré avant ce jour'
+              }
+              badge={lastWash ? `J+${daysBetween(lastWash, selectedDate)}` : undefined}
+            />
           )}
 
           {!initialSyncing && shown('emotion') && selectedLog && (

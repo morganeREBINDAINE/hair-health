@@ -73,7 +73,7 @@ export const CategoryColors = {
 /** Couleurs des éléments « Cheveux » (légende du calendrier, tuiles de l'accueil). */
 export const HairItemColors = {
   wash: '#0090FF',
-  loss: '#D6409F',
+  unwashed: '#3E63DD',
   haircut: '#AD7F58',
   henna: '#F76B15',
 } as const;
