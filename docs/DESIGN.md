@@ -1,206 +1,150 @@
----
-name: Culinary Sun
-colors:
-  surface: '#fff8f7'
-  surface-dim: '#efd4d3'
-  surface-bright: '#fff8f7'
-  surface-container-lowest: '#ffffff'
-  surface-container-low: '#fff0f0'
-  surface-container: '#ffe9e8'
-  surface-container-high: '#fde2e1'
-  surface-container-highest: '#f7dcdc'
-  on-surface: '#261818'
-  on-surface-variant: '#544434'
-  inverse-surface: '#3d2c2c'
-  inverse-on-surface: '#ffedec'
-  outline: '#877361'
-  outline-variant: '#dac2ad'
-  surface-tint: '#8a5100'
-  primary: '#8a5100'
-  on-primary: '#ffffff'
-  primary-container: '#ff9a00'
-  on-primary-container: '#653a00'
-  inverse-primary: '#ffb86d'
-  secondary: '#645d54'
-  on-secondary: '#ffffff'
-  secondary-container: '#ebe1d5'
-  on-secondary-container: '#6a635a'
-  tertiary: '#43664d'
-  on-tertiary: '#ffffff'
-  tertiary-container: '#95bb9d'
-  on-tertiary-container: '#2a4b34'
-  error: '#ba1a1a'
-  on-error: '#ffffff'
-  error-container: '#ffdad6'
-  on-error-container: '#93000a'
-  primary-fixed: '#ffdcbd'
-  primary-fixed-dim: '#ffb86d'
-  on-primary-fixed: '#2c1600'
-  on-primary-fixed-variant: '#693c00'
-  secondary-fixed: '#ebe1d5'
-  secondary-fixed-dim: '#cec5ba'
-  on-secondary-fixed: '#1f1b14'
-  on-secondary-fixed-variant: '#4c463d'
-  tertiary-fixed: '#c5eccc'
-  tertiary-fixed-dim: '#aad0b1'
-  on-tertiary-fixed: '#00210e'
-  on-tertiary-fixed-variant: '#2c4e36'
-  background: '#fff8f7'
-  on-background: '#261818'
-  surface-variant: '#f7dcdc'
-typography:
-  headline-xl:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 32px
-    fontWeight: '700'
-    lineHeight: 40px
-    letterSpacing: -0.02em
-  headline-xl-mobile:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 26px
-    fontWeight: '700'
-    lineHeight: 34px
-    letterSpacing: -0.01em
-  headline-lg:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 24px
-    fontWeight: '700'
-    lineHeight: 32px
-    letterSpacing: -0.01em
-  headline-md:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 20px
-    fontWeight: '600'
-    lineHeight: 28px
-  headline-sm:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 18px
-    fontWeight: '600'
-    lineHeight: 24px
-  body-lg:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 16px
-    fontWeight: '400'
-    lineHeight: 24px
-  body-md:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 14px
-    fontWeight: '400'
-    lineHeight: 20px
-  body-sm:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 12px
-    fontWeight: '400'
-    lineHeight: 18px
-  label-lg:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 14px
-    fontWeight: '600'
-    lineHeight: 20px
-    letterSpacing: 0.01em
-  label-md:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 12px
-    fontWeight: '600'
-    lineHeight: 16px
-    letterSpacing: 0.02em
-  label-sm:
-    fontFamily: Plus Jakarta Sans
-    fontSize: 11px
-    fontWeight: '600'
-    lineHeight: 14px
-    letterSpacing: 0.03em
-rounded:
-  sm: 0.5rem
-  DEFAULT: 1rem
-  md: 1.5rem
-  lg: 2rem
-  xl: 3rem
-  full: 9999px
-spacing:
-  gutter: 1rem
-  gutter-sm: 0.75rem
-  margin: 1.25rem
-  margin-md: 1.5rem
-  space-xs: 0.25rem
-  space-sm: 0.5rem
-  space-md: 1rem
-  space-lg: 1.5rem
-  space-xl: 2rem
+# Design system — « Organic Vitality »
+
+Référence visuelle de l'application **Santé Hijra** (suivi santé & cheveux). Ce document décrit le design **tel qu'il est implémenté** : la source de vérité reste le code.
+
+| Quoi | Où |
+|------|----|
+| Couleurs, rayons, espacements, ombres, typographie | `src/constants/theme.ts` |
+| Composants d'interface réutilisables | `src/components/ui.tsx` |
+| Graphiques SVG (barres, courbes) | `src/components/charts.tsx` |
+| Dock de navigation flottant | `src/app/_layout.tsx` (`FloatingDock`) |
+
+Règle d'or : **aucune couleur, taille de police ou ombre en dur dans un écran**. On passe par `Palette`, `Type`, `Spacing`, `Radius`, `Elevation` et les composants de `ui.tsx`. Si un besoin n'existe pas, on ajoute le token dans `theme.ts` plutôt qu'une valeur locale.
+
 ---
 
-## Brand & Style
+## Identité
 
-This design system establishes an appetizing, uplifting, and tactile culinary experience. Designed for passionate home cooks, mindful eaters, and daily meal planners, the aesthetic replaces clinical kitchen utility with warmth, sensory delight, and effortless discovery.
+Application personnelle de bien-être, utilisée chaque jour en une minute. Le ton est **doux, organique et rassurant** : canvas vert très pâle, cartes blanches flottantes, formes en pilule, un vert vitalité pour l'action et le positif, un corail pour l'alerte. Le contraste fort vient de l'« obsidienne » (presque noir) réservée aux éléments les plus importants.
 
-The design identity marries warm minimalism with tactile softness. It balances deep culinary hues with bright, sun-kissed citrus accents, evoking morning light across fresh ingredients on a kitchen counter. Interactions feel organic, welcoming, and generous, utilizing soft geometry, pillow-like depth, and generous whitespace that invites browsing without sensory fatigue.
+- Thème **clair uniquement** (`Colors.light` et `Colors.dark` pointent sur la même palette).
+- Langue : français, tutoiement (« Comment te sens-tu »), phrases courtes.
+- Icônes : **Lucide** (`lucide-react-native`) exclusivement. Pas d'emoji comme icône.
 
-## Colors
+---
 
-The palette draws directly from natural foods and sunlit kitchen spaces:
+## Couleurs (`Palette`)
 
-- **Primary (`#FF9A00`):** Amber zest. Used for primary CTAs, active tab indicators, key badges, and interactive focal points. It commands attention without introducing warning or danger semantics.
-- **Secondary (`#FDF3E7`):** Warm milk froth. Acts as the primary page canvas and soft container fill, grounding the interface in comforting, non-sterile warmth compared to stark cool whites.
-- **Tertiary (`#84A98C`):** Fresh sage. Applied sparingly for botanical/produce badges, dietary tags (vegetarian, organic), and soothing confirmation states.
-- **Neutral (`#433232`):** Espresso charcoal. A warm, rich brown-black used for crisp headings, readable body text, and dark structural accents. It offers strong contrast while eliminating the harshness of pitch black `#000000`.
+### Surfaces
 
-### Functional Pairings
-Pure white (`#FFFFFF`) is reserved for card surfaces and elevated content tiles, creating a crisp distinction over the `#FDF3E7` background. Subtle pastel washes (such as pale tomato red, soft yolk yellow, and leaf green) provide thematic backgrounds for ingredient icons.
+| Token | Valeur | Usage |
+|-------|--------|-------|
+| `canvas` | `#F3F6F2` | Fond de tous les écrans et de l'en-tête |
+| `card` | `#FFFFFF` | Cartes, chips au repos, onglets illustrés |
+| `containerLow` | `#F1F4F0` | Champs de saisie, lignes à bascule, pastilles d'information, badge neutre |
+| `container` | `#ECEFEB` | Fond d'icône par défaut, piste des barres, contrôle segmenté |
+| `containerHighest` | `#E0E3DF` | Squelettes de chargement, interrupteur désactivé |
+| `obsidian` | `#191D1A` | Carte sombre (« héros »), onglet actif du dock, boutons principaux, élément sélectionné |
 
-## Typography
+### Texte
 
-Plus Jakarta Sans powers all typographical levels. Its contemporary geometric curves, wide apertures, and friendly rounded terminals provide clarity and culinary optimism.
+| Token | Valeur | Usage |
+|-------|--------|-------|
+| `text` | `#121614` | Titres et texte principal |
+| `textVariant` | `#414A37` | Texte secondaire contrasté, libellés de jours |
+| `textMuted` | `#7E8680` | Sous-titres, métadonnées, icônes inactives |
+| `obsidianText` / `obsidianMuted` | `#EEF2EE` / 65 % | Texte sur carte obsidienne |
 
-- **Headlines:** Set with tight negative letter tracking and heavy weights (`700` and `600`) to create confident, friendly anchors for recipe names and section headers.
-- **Body:** Uses regular (`400`) weight with generous line heights to preserve effortless legibility while reading kitchen steps at arm's length.
-- **Labels & Metadata:** Rendered in medium and semi-bold weights (`600`) with slight positive tracking to ensure cooking durations, calorie badges, and ingredient quantities remain instantly scannable.
+### Sémantique
 
-## Layout & Spacing
+| Famille | Tokens | Sens |
+|---------|--------|------|
+| **Vert vitalité** | `lime` `#8EE341`, `limeSoft` (22 %), `primary` `#386B00`, `onLime` | Action principale (bouton central du dock), succès, valeur normale, lien texte (`primary`) |
+| **Corail** | `coral` `#FA6855`, `coralDeep` `#AD3124`, `coralSoft`, `coralContainer`, `onCoral` | Alerte, pic, valeur hors norme, prise de sang |
+| **Ambre** | `amber` `#F39A38`, `amberSoft` | Avertissement léger (« bientôt », « à surveiller ») |
+| **Framboise** | `raspberry` `#B83568`, `raspberrySoft` | Cycle menstruel (cartes, icônes) |
+| **Règles** | `menstrual` `#D32F2F`, `menstrualDeep` | Jours de règles dans les graphiques |
+| `error` | `#BA1A1A` | Erreurs de formulaire (`FieldError`) |
 
-The layout model is optimized primarily for mobile-first touch interfaces, utilizing a 4-column layout on handheld devices, scaling to an 8-column layout on tablets and a 12-column fixed grid on desktop screens.
+`primary` sert au texte et aux icônes vertes (lisible) ; `lime` sert aux fonds (jamais de texte `lime` sur fond blanc).
 
-### Grid & Margins
-- **Mobile Screen Boundary:** A persistent screen margin of `margin` (20px / `1.25rem`) provides edge-to-edge comfort, framing card tiles neatly against the warm canvas.
-- **Horizontal Carousels:** Featured categories and recent items bleed past the margin into an edge-swipe rail with `space-md` gaps.
-- **Card Padding:** Content containers leverage `space-md` (16px) or `space-lg` (24px) internal clearance, giving photography and typographic hierarchy room to breathe.
+### Catégories d'événements (`CategoryColors`)
 
-## Elevation & Depth
+Utilisées par le calendrier et les pastilles : `blood` (corail foncé), `henna` `#C98A1A`, `wash` `#3E8E7E`, `stress` (corail), `meds` (vert), `haircut` `#5B5F5B`, `sleep` `#5C6BC0`, `cycle` (framboise). Toute nouvelle vue qui représente ces catégories réutilise ces couleurs.
 
-Visual hierarchy relies on soft, diffused ambient drop shadows tinted with warm espresso undertones rather than cold grays. This replicates natural daylight bouncing across kitchen tables.
+---
 
-- **Level 0 (Canvas):** The baseline creamy canvas (`#FDF3E7`) where content sits flat.
-- **Level 1 (Cards & Tile Surfaces):** Pure white cards (`#FFFFFF`) float using a double shadow formula: `0 4px 16px rgba(67, 50, 50, 0.04), 0 1px 4px rgba(67, 50, 50, 0.02)`.
-- **Level 2 (Floating Action Buttons & Overlays):** Interactive floating buttons, heart bookmarks, and active navigation bars lift using `0 8px 24px rgba(67, 50, 50, 0.08), 0 2px 6px rgba(67, 50, 50, 0.04)`.
-- **Level 3 (Modals & Sheet Drawers):** Bottom instruction sheets and search overlays project `0 16px 40px rgba(67, 50, 50, 0.12)`.
+## Typographie (`Type`)
 
-## Shapes
+Deux familles : **Plus Jakarta Sans** (titres, libellés, chiffres) et **Inter** (texte courant). Toujours via `<AppText variant="…">`.
 
-The design system adopts a Pill-shaped (`3`) structural profile, infusing the UI with friendliness, approachability, and organic warmth.
+| Variante | Police | Taille / interligne | Usage |
+|----------|--------|---------------------|-------|
+| `displayLg` | Jakarta Bold | 36 / 42 | Chiffre clé d'une carte KPI |
+| `metric` | Jakarta Bold | 32 / 38 | Valeur chiffrée secondaire |
+| `headlineLg` | Jakarta SemiBold | 28 / 34 | Titre d'accroche d'un écran |
+| `headlineMd` | Jakarta SemiBold | 22 / 28 | Titre de feuille (bottom sheet) |
+| `headlineSm` | Jakarta SemiBold | 18 / 24 | Titre de section, titre de l'en-tête |
+| `bodyLg` / `bodyMd` / `bodySm` | Inter | 16 / 14 / 12 | Texte courant, sous-titres |
+| `labelMd` | Jakarta SemiBold | 13 / 18 | Titre de ligne, bouton compact, chip |
+| `labelSm` | Jakarta SemiBold | 11 / 14 | Badge, surtitre, axe de graphique |
 
-- **Interactive Controls:** All buttons, search fields, category chips, and filter tags utilize full pill radiuses (`border-radius: 9999px`).
-- **Cards & Media:** Recipe photo cards and instruction modules use `rounded-lg` (32px / `2rem`) to soften imagery and align with modern mobile hardware contours.
-- **Sheet Drawers:** Bottom sheets feature large `rounded-xl` (48px / `3rem`) curvature on top corners.
+Les titres ont un espacement négatif (déjà intégré aux tokens). Le surtitre de l'en-tête est en `labelSm` majuscules, espacement 1.
 
-## Components
+---
 
-### Buttons
-- **Primary Button:** Filled `#FF9A00` background with pure white text, bold label typography, pill-shaped (`9999px`), with horizontal padding of `space-lg` and vertical padding of `space-md`. Soft amber shadow on hover or active press.
-- **Secondary Button:** Soft `#FDF3E7` fill or pure white card surface with `#433232` typography, accompanied by subtle espresso-tinted ambient elevation.
-- **Icon Actions:** Circular (44px × 44px) button with pure white or translucent surface (`rgba(255, 255, 255, 0.85)` with backdrop blur) housing subtle iconography (such as heart bookmarks or back arrows).
+## Espacements, rayons, élévation
 
-### Search Field
-- Pill-shaped full-width input container filled with pure `#FFFFFF`, featuring an espresso magnifying icon (`space-md` leading indent), light placeholder text (`#433232` at 40% opacity), and zero heavy borders. Soft Level 1 elevation separates it from the creamy screen background.
+**`Spacing`** (rythme de 4/8) : `xs 4`, `sm 8`, `md 16`, `lg 24`, `xl 32`, `gutter 12` (entre deux cartes côte à côte), `margin 20` (marge latérale des écrans).
 
-### Category & Recipe Chips
-- **Category Tiles:** Vertically aligned pill or rounded squircle tiles with a vibrant orange or warm background, topped with an organic photograph of food, holding centered bold text below.
-- **Ingredient Chips:** Compact square-rounded tiles (64px to 72px) with pastel tinted backgrounds (e.g., light red for tomatoes, soft yellow for cheese, pale mint for greens) containing a centered ingredient image, accompanied by bold name and quantity labels underneath.
+- Écrans : `paddingHorizontal: Spacing.margin`, sections séparées de `Spacing.lg`, largeur max `MaxContentWidth` (640) centrée.
+- Bas de défilement : `paddingBottom: DockClearance` (112) pour ne rien cacher sous le dock.
 
-### Cards
-- **Recipe Showcase Card:** Pure white `#FFFFFF` surface featuring a prominent rounded top or bleed image, rounded corners (`2rem`), bold recipe title in `#433232`, metadata row (prep time, calories, serving count accompanied by soft orange mini-icons), and a floating favorite heart button.
+**`Radius`** : `sm 8`, `md 16`, `lg 24` (lignes, cartes compactes), `xl 28` (cartes), `xxl 32` (haut des bottom sheets), `full` (boutons, chips, badges, champs).
 
-### Lists & Cooking Steps
-- Step numbers presented in rounded pill or badge containers using tinted `#FF9A00` backgrounds with white bold digits.
-- Accompanying text formatted in `body-lg` espresso charcoal with generous `space-md` paragraph separation.
+**`Elevation`** (ombres teintées obsidienne, jamais grises) :
 
-### Checkboxes & Radio Controls
-- Circular, pill-aligned selection toggles utilizing `#FF9A00` when active with a pure white checkmark; unselected states feature a soft cream border (`2px solid rgba(67, 50, 50, 0.15)`).
+| Niveau | Usage |
+|--------|-------|
+| `card` | Cartes blanches, chips au repos |
+| `dark` | Carte obsidienne, bouton `PillButton` sombre, onglet actif |
+| `floating` | Dock de navigation |
+
+---
+
+## Composants (`ui.tsx`)
+
+| Composant | Rôle et règles |
+|-----------|----------------|
+| `ScreenHeader` | En-tête de chaque onglet : logo rond blanc, surtitre « Santé Hijra », titre. Emplacement `right` optionnel pour une action (ex. bouton retour). |
+| `Card` | Surface blanche `Radius.xl`, padding 20. `dark` = carte obsidienne. Avec `onPress`, réduction à 98,5 % à l'appui. |
+| `IconCircle` | Icône Lucide dans un cercle teinté. Le fond reprend la teinte douce de la catégorie (`limeSoft`, `coralSoft`, `raspberrySoft`…). |
+| `Badge` | Pilule d'état courte (≤ 3 mots). Tons : `lime`, `limeSoft`, `coral`, `coralSoft`, `amber`, `neutral`, `light`, `dark`. |
+| `PillButton` | Bouton pilule 54 px (40 px en `compact`). Variantes `dark` (action principale), `lime`, `ghost`, `coral`. Prop `loading` : spinner + bouton bloqué. |
+| `Chip` | Filtre sélectionnable : blanc au repos, obsidienne sélectionné, compteur optionnel. |
+| `Segmented` | Choix exclusif court (Oui / Non, 6 / 12 mois). |
+| `Toggle` / `ToggleRow` | Interrupteur pilule vert ; ligne icône + titre + interrupteur sur `containerLow`. |
+| `SectionHeader` | Titre de section avec icône, sous-titre et action à droite. |
+| `ShowMoreToggle` | « Voir plus (n) » / « Voir moins » sous une liste tronquée. |
+| `ImageTabBar` | Onglets illustrés (vignette ronde + libellé), actif en obsidienne. |
+| `Skeleton` / `SkeletonCard` | Blocs pulsants qui reprennent la structure de l'écran pendant le chargement. |
+| `inputStyle` | Champ texte pilule 52 px sur `containerLow`. |
+
+### Motifs récurrents
+
+- **Carte KPI (« bento »)** : deux cartes côte à côte (`gap: Spacing.gutter`), la plus importante en obsidienne. Icône en haut, libellé `labelSm`, chiffre `displayLg`, ligne de contexte `bodySm` avec petite icône.
+- **Ligne d'élément** (`careRow`) : carte `Radius.lg`, padding 14, `IconCircle` 48 px + titre `labelMd` 15 px + sous-titre `bodySm` + badge ou chevron à droite.
+- **Carrousel horizontal** : déborde jusqu'aux bords de l'écran (`marginHorizontal: -Spacing.margin`) en gardant l'alignement sur la marge.
+- **Pastille d'information** : pilule `containerLow` avec icône + phrase courte, pour un constat (pic, dispute…).
+- **Bottom sheet** : coins supérieurs `Radius.xxl`, titre `headlineMd`.
+- **Dock flottant** : pilule blanche centrée en bas, bouton central `lime` (Journal), onglet actif obsidienne avec libellé.
+
+---
+
+## États et retours
+
+- **Chargement initial** : squelettes (`Skeleton`) reprenant la forme de l'écran, pas de spinner plein écran.
+- **Action asynchrone** : `PillButton loading` (ou spinner local) et déclencheur désactivé jusqu'à la réponse.
+- **Erreur de requête** : `Toast.error("…")`, message court et actionnable.
+- **Erreur de formulaire** : `FieldError` sous le champ concerné, en `error`.
+- **Vide** : phrase d'aide centrée en `textMuted` qui dit quoi faire (« Renseigne au moins 2 estimations… »).
+- **Appui** : toute zone tappable a un retour visuel (réduction d'échelle ou opacité).
+
+---
+
+## Accessibilité
+
+- Zones tactiles ≥ 44 × 44 px ; sinon `hitSlop`.
+- Tout bouton icône seul porte un `accessibilityLabel` ; les titres de section portent `accessibilityRole="header"`.
+- La couleur n'est jamais le seul indicateur : un état coloré est toujours accompagné d'un texte (badge, valeur, légende).
+- Texte courant jamais sous 12 px ; pas de texte `textMuted` sur fond `container` ou plus sombre.
