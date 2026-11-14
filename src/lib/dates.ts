@@ -44,6 +44,16 @@ export const frDate = (iso: string) => iso.split('-').reverse().join('/');
 export const daysBetween = (fromIso: string, toIso: string) =>
   Math.round((parse(toIso).getTime() - parse(fromIso).getTime()) / 86400000);
 
+/** Ancienneté lisible d'un nombre de jours écoulés : « Aujourd'hui », « Hier », « Il y a 5 jours », « Il y a 3 mois ». */
+export function relativeDays(days: number): string {
+  if (days <= 0) return "Aujourd'hui";
+  if (days === 1) return 'Hier';
+  if (days < 45) return `Il y a ${days} jours`;
+  if (days < 365) return `Il y a ${Math.round(days / 30.44)} mois`;
+  const years = Math.floor(days / 365);
+  return `Il y a ${years} an${years > 1 ? 's' : ''}`;
+}
+
 /** Lundi de la semaine contenant `iso`. */
 export function weekStart(iso: string): string {
   const wd = weekdayIndex(iso);

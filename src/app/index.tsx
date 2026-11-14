@@ -1,17 +1,15 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
-  Activity,
   ChartColumn,
   Check,
   ChevronRight,
   CircleCheck,
   Clock,
   Droplet,
-  Frown,
+  HeartCrack,
   NotebookPen,
   Pill,
   Scissors,
-  Smile,
   Sparkles,
   TrendingDown,
   TrendingUp,
@@ -26,7 +24,7 @@ import { PillBarChart } from '../components/charts';
 import { AppText, Badge, Card, IconCircle, ScreenHeader, ShowMoreToggle, Skeleton, SkeletonCard, type BadgeTone } from '../components/ui';
 import { DockClearance, Palette, Spacing, Type } from '../constants/theme';
 import { getCycleStatus, getPeriods, hasFlow, predictNextPeriod } from '../lib/cycle';
-import { dayShort, daysBetween, frDate, shiftIso, todayIso } from '../lib/dates';
+import { dayShort, daysBetween, frDate, relativeDays, shiftIso, todayIso } from '../lib/dates';
 import { computeRecheckReminders, type RecheckReminder } from '../lib/labStatus';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
@@ -110,16 +108,12 @@ export default function DashboardScreen() {
 
   const last7 = logs.filter((l) => l.date >= d7Str && l.date <= todayStr);
 
-  const avgAnxiety = avg(last7.filter((l) => l.anxietyScore != null).map((l) => l.anxietyScore as number));
   const avgLoss = avg(last7.filter((l) => l.hairLossAmount != null).map((l) => l.hairLossAmount as number));
   const lossDays = last7.filter((l) => l.hairLossAmount != null).length;
 
-  const anxietyLabel =
-    avgAnxiety === null ? '–' : avgAnxiety <= 3 ? 'Calme' : avgAnxiety <= 6 ? 'Modéré' : 'Élevé';
-  const lossLabel = avgLoss === null ? '–' : avgLoss <= 50 ? 'Normal' : avgLoss <= 100 ? 'À surveiller' : 'Forte';
-
-  const throatDays = last7.filter((l) => l.lumpInThroat).length;
   const conflictDays = last7.filter((l) => l.conflictWithHusband).length;
+  // Sur tout l'historique (les journaux sont triés par date croissante)
+  const lastConflict = logs.findLast((l) => l.conflictWithHusband && l.date <= todayStr);
 
   // ── Barres hebdomadaires d'anxiété ──
   const week = Array.from({ length: 7 }).map((_, i) => {
@@ -192,44 +186,28 @@ export default function DashboardScreen() {
 
         {/* Bento duo */}
         <View style={styles.bento}>
-          <Card dark style={styles.bentoCard}>
-            <View style={styles.rowBetween}>
-              <IconCircle icon={Activity} bg="rgba(224,227,223,0.14)" color={Palette.limeFixed} size={36} />
-              <Badge label={anxietyLabel} tone={avgAnxiety !== null && avgAnxiety > 6 ? 'coral' : 'lime'} />
-            </View>
+          <Card
+            dark
+            style={styles.bentoCard}
+            onPress={lastConflict ? () => router.push({ pathname: '/entry', params: { date: lastConflict.date } }) : undefined}>
+            <IconCircle icon={HeartCrack} bg="rgba(224,227,223,0.14)" color={Palette.coralContainer} size={36} />
             <View style={{ marginTop: 24 }}>
               <AppText variant="labelSm" color={Palette.obsidianMuted}>
-                Anxiété moy. · 7 j
+                Dernière grosse dispute
               </AppText>
               <View style={styles.metricRow}>
                 <AppText variant="displayLg" color="#FFFFFF">
-                  {avgAnxiety !== null ? avgAnxiety.toFixed(1).replace('.0', '') : '–'}
-                </AppText>
-                <AppText variant="labelMd" color={Palette.obsidianMuted}>
-                  /10
+                  {lastConflict ? lastConflict.date.slice(8) + '/' + lastConflict.date.slice(5, 7) : '–'}
                 </AppText>
               </View>
-              <View style={styles.inlineIcon}>
-                {throatDays > 0 ? (
-                  <Frown size={14} color={Palette.coralContainer} />
-                ) : (
-                  <Smile size={14} color={Palette.limeDim} />
-                )}
-                <AppText variant="bodySm" color={throatDays > 0 ? Palette.coralContainer : Palette.limeDim}>
-                  {throatDays > 0 ? `Boule gorge ${throatDays} j` : 'Pas de boule gorge'}
-                </AppText>
-              </View>
+              <AppText variant="bodySm" color={Palette.obsidianMuted} style={{ marginTop: 8 }}>
+                {lastConflict ? relativeDays(daysBetween(lastConflict.date, todayStr)) : 'Aucune dispute notée'}
+              </AppText>
             </View>
           </Card>
 
           <Card style={styles.bentoCard}>
-            <View style={styles.rowBetween}>
-              <IconCircle icon={Scissors} color={Palette.primary} size={36} />
-              <Badge
-                label={lossLabel}
-                tone={avgLoss !== null && avgLoss > 100 ? 'coralSoft' : avgLoss !== null && avgLoss > 50 ? 'amber' : 'limeSoft'}
-              />
-            </View>
+            <IconCircle icon={Scissors} color={Palette.primary} size={36} />
             <View style={{ marginTop: 24 }}>
               <AppText variant="labelSm" color={Palette.textVariant}>
                 Chute estimée / jour

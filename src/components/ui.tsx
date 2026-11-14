@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { ChevronDown, ChevronUp, UserRound, type LucideIcon } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, type LucideIcon } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -41,7 +41,7 @@ export function AppText({
   );
 }
 
-// ─── En-tête d'écran (marque + titre + avatar) ──────────────────────────────
+// ─── En-tête d'écran (marque + titre + action optionnelle) ──────────────────
 
 export function ScreenHeader({
   title,
@@ -66,11 +66,7 @@ export function ScreenHeader({
           <AppText variant="headlineSm">{title}</AppText>
         </View>
       </View>
-      {right ?? (
-        <View style={styles.avatar}>
-          <UserRound size={17} color="#FFFFFF" />
-        </View>
-      )}
+      {right}
     </View>
   );
 }
@@ -528,14 +524,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   eyebrow: { textTransform: 'uppercase', letterSpacing: 1 },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Palette.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   card: {
     backgroundColor: Palette.card,
     borderRadius: Radius.xl,
