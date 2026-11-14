@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { BloodTestSheet } from '../components/analyses/BloodTestSheet';
 import { ExamSheet } from '../components/analyses/ExamSheet';
-import { CureSection } from '../components/home/CureSection';
+import { CareSection } from '../components/home/CareSection';
 import { CycleRow } from '../components/home/CycleRow';
 import { DashboardSkeleton } from '../components/home/DashboardSkeleton';
 import { HairLossCard } from '../components/home/HairLossCard';
@@ -14,7 +14,7 @@ import { WeekCard } from '../components/home/WeekCard';
 import { ScreenHeader } from '../components/ui';
 import { DockClearance, MaxContentWidth, Palette, Spacing } from '../constants/theme';
 import { getCycleStatus, getPeriods, predictNextPeriod } from '../lib/cycle';
-import { findLastConflict, hairChartPoints, hairLossSummary, upcomingAgenda, weekSummary } from '../lib/dashboard';
+import { findLastConflict, hairChartPoints, hairLossSummary, lastHairCare, upcomingAgenda, weekSummary } from '../lib/dashboard';
 import { todayIso } from '../lib/dates';
 import { computeRecheckReminders } from '../lib/labStatus';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
@@ -136,9 +136,11 @@ export default function DashboardScreen() {
           onOpenMarker={(id) => router.push({ pathname: '/marker/[id]', params: { id } })}
         />
 
-        <CureSection
+        <CareSection
+          hairCare={lastHairCare(logs, today)}
           plans={curePlans}
           takenToday={todayLog?.medications.filter((m) => m.taken) ?? []}
+          today={today}
           onOpenEntry={() => openEntry()}
         />
       </ScrollView>

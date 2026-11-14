@@ -18,6 +18,7 @@ import {
 } from 'lucide-react-native';
 import React, { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { SHAMPOO_OPTIONS } from '../constants/hairCare';
 import { DockClearance, Palette, Radius, Spacing, Type } from '../constants/theme';
 import {
   NOTE_MAX_LENGTH,
@@ -53,13 +54,6 @@ interface DailyEntryFormProps {
   /** Contenu affiché en tête du formulaire (défile avec lui). */
   header?: React.ReactNode;
 }
-
-const SHAMPOO_OPTIONS: { id: ShampooType; label: string }[] = [
-  { id: 'bebe', label: 'Shampoing bébé' },
-  { id: 'sans_sulfate', label: 'Sans sulfate' },
-  { id: 'avec_sulfate', label: 'Avec sulfate' },
-  { id: 'traitant', label: 'Traitant' },
-];
 
 const FATIGUE_OPTIONS: { id: FatigueLevel; label: string }[] = [
   { id: 'normal', label: 'Normal' },

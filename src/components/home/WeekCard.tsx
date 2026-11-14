@@ -8,12 +8,21 @@ import { AppText, Badge, Card, SectionHeader } from '../ui';
 
 const formatScore = (n: number) => n.toFixed(1).replace('.0', '').replace('.', ',');
 
+/** 6.5 → « 6 h 30 », 7 → « 7 h ». */
+function formatHours(hours: number): string {
+  const total = Math.round(hours * 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return m ? `${h} h ${String(m).padStart(2, '0')}` : `${h} h`;
+}
+
 /** Les 7 derniers jours : chiffres clés, barres d'anxiété et constat du pic. */
 export function WeekCard({ week, today, peakLog }: { week: WeekSummary; today: string; peakLog: DailyLog | undefined }) {
-  const { days, peak, avgAnxiety, throatDays, conflictDays } = week;
+  const { days, peak, avgAnxiety, avgSleep, throatDays, conflictDays } = week;
 
   const stats = [
     { label: 'Anxiété moy.', value: avgAnxiety !== null ? `${formatScore(avgAnxiety)}/10` : '–' },
+    { label: 'Sommeil moy.', value: avgSleep !== null ? formatHours(avgSleep) : '–' },
     { label: 'Boule gorge', value: `${throatDays} j` },
   ];
 

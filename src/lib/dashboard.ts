@@ -1,6 +1,6 @@
 // Calculs de l'accueil : fonctions pures, sans affichage, à partir des données déjà chargées.
 
-import { DailyLog, PlannedCheckup } from '../types';
+import { DailyLog, PlannedCheckup, ShampooType } from '../types';
 import { hasFlow } from './cycle';
 import { dayShort, daysBetween, shiftIso } from './dates';
 import type { RecheckReminder } from './labStatus';
@@ -72,6 +72,8 @@ export type WeekSummary = {
   /** Jour le plus anxieux (score ≥ 5), null sinon. */
   peak: WeekDay | null;
   avgAnxiety: number | null;
+  /** Heures de sommeil moyennes sur les nuits notées. */
+  avgSleep: number | null;
   throatDays: number;
   conflictDays: number;
 };
@@ -92,8 +94,28 @@ export function weekSummary(logs: DailyLog[], today: string): WeekSummary {
     days,
     peak,
     avgAnxiety: average(values(week, (l) => l.anxietyScore)),
+    avgSleep: average(values(week, (l) => l.sleepHours)),
     throatDays: week.filter((l) => l.lumpInThroat).length,
     conflictDays: week.filter((l) => l.conflictWithHusband).length,
+  };
+}
+
+// ─── Soins capillaires ──────────────────────────────────────────────────────
+
+export type HairCareHistory = {
+  wash: { date: string; shampoo: ShampooType | null } | null;
+  henna: string | null;
+  haircut: string | null;
+};
+
+/** Derniers lavage, henné et coupe notés (journaux triés par date croissante). */
+export function lastHairCare(logs: DailyLog[], today: string): HairCareHistory {
+  const past = logs.filter((l) => l.date <= today);
+  const wash = past.findLast((l) => l.hairWashDone);
+  return {
+    wash: wash ? { date: wash.date, shampoo: wash.shampooType } : null,
+    henna: past.findLast((l) => l.hennaDone)?.date ?? null,
+    haircut: past.findLast((l) => l.haircutDone)?.date ?? null,
   };
 }
 
