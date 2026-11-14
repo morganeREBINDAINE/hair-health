@@ -1,40 +1,26 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import {
-  ChartColumn,
-  Check,
-  ChevronRight,
-  CircleCheck,
-  Clock,
-  Droplet,
-  HeartCrack,
-  NotebookPen,
-  Pill,
-  Scissors,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
-  TriangleAlert
-} from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { BloodTestSheet } from '../components/analyses/BloodTestSheet';
 import { ExamSheet } from '../components/analyses/ExamSheet';
-import { checkupLabel } from '../components/analyses/Planning';
-import { PillBarChart } from '../components/charts';
-import { AppText, Badge, Card, IconCircle, ScreenHeader, ShowMoreToggle, Skeleton, SkeletonCard, type BadgeTone } from '../components/ui';
-import { DockClearance, Palette, Spacing, Type } from '../constants/theme';
-import { getCycleStatus, getPeriods, hasFlow, predictNextPeriod } from '../lib/cycle';
-import { dayShort, daysBetween, frDate, relativeDays, shiftIso, todayIso } from '../lib/dates';
-import { computeRecheckReminders, type RecheckReminder } from '../lib/labStatus';
+import { CureSection } from '../components/home/CureSection';
+import { CycleRow } from '../components/home/CycleRow';
+import { DashboardSkeleton } from '../components/home/DashboardSkeleton';
+import { HairLossCard } from '../components/home/HairLossCard';
+import { KeyMetrics } from '../components/home/KeyMetrics';
+import { TodayStatus } from '../components/home/TodayStatus';
+import { UpcomingSection } from '../components/home/UpcomingSection';
+import { WeekCard } from '../components/home/WeekCard';
+import { ScreenHeader } from '../components/ui';
+import { DockClearance, MaxContentWidth, Palette, Spacing } from '../constants/theme';
+import { getCycleStatus, getPeriods, predictNextPeriod } from '../lib/cycle';
+import { findLastConflict, hairChartPoints, hairLossSummary, upcomingAgenda, weekSummary } from '../lib/dashboard';
+import { todayIso } from '../lib/dates';
+import { computeRecheckReminders } from '../lib/labStatus';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
 import { StorageService } from '../services/storageService';
-import { CyclePrediction, CycleStatus, DailyLog, LabMarkerDefinition, LabTest, PlannedCheckup, TreatmentPlan } from '../types';
-
-/** Nombre de prochaines prises de sang affichées avant « Voir plus ». */
-const NEXT_CHECKS_PREVIEW = 3;
-
-const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+import { DailyLog, LabMarkerDefinition, LabTest, PlannedCheckup, TreatmentPlan } from '../types';
 
 export default function DashboardScreen() {
   const router = useRouter();
@@ -49,7 +35,6 @@ export default function DashboardScreen() {
   // Rendez-vous en cours de saisie (« C'est fait ») ; `session` sert de key au formulaire
   const [completing, setCompleting] = useState<{ item: PlannedCheckup; session: number } | null>(null);
   const [completeSession, setCompleteSession] = useState(0);
-  const [showAllChecks, setShowAllChecks] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -93,66 +78,31 @@ export default function DashboardScreen() {
   };
 
   if (initialLoading || initialSyncing) {
-    return <DashboardSkeleton />;
+    return (
+      <View style={styles.screen}>
+        <DashboardSkeleton contentStyle={styles.content} />
+      </View>
+    );
   }
 
   const openCompletion = (item: PlannedCheckup) => {
     setCompleteSession((n) => n + 1);
     setCompleting({ item, session: completeSession + 1 });
   };
+  const openEntry = (date?: string) => router.push(date ? { pathname: '/entry', params: { date } } : '/entry');
+  const openPlanned = () => router.push({ pathname: '/analyses', params: { tab: 'planned' } });
 
-  // ── Fenêtres de 7 jours ──
-  const todayStr = todayIso();
-  const d7Str = shiftIso(todayStr, -6);
+  const today = todayIso();
   const logsByDate = new Map(logs.map((l) => [l.date, l]));
+  const todayLog = logsByDate.get(today);
 
-  const last7 = logs.filter((l) => l.date >= d7Str && l.date <= todayStr);
-
-  const avgLoss = avg(last7.filter((l) => l.hairLossAmount != null).map((l) => l.hairLossAmount as number));
-  const lossDays = last7.filter((l) => l.hairLossAmount != null).length;
-
-  const conflictDays = last7.filter((l) => l.conflictWithHusband).length;
-  // Sur tout l'historique (les journaux sont triés par date croissante)
-  const lastConflict = logs.findLast((l) => l.conflictWithHusband && l.date <= todayStr);
-
-  // ── Barres hebdomadaires d'anxiété ──
-  const week = Array.from({ length: 7 }).map((_, i) => {
-    const date = shiftIso(todayStr, i - 6);
-    return { date, label: dayShort(date), score: logsByDate.get(date)?.anxietyScore ?? null };
-  });
-  const peak = week.reduce<(typeof week)[number] | null>(
-    (best, d) => (d.score !== null && d.score >= 5 && (!best || d.score > (best.score ?? 0)) ? d : best),
-    null
-  );
-  const peakLog = peak ? logsByDate.get(peak.date) : undefined;
-
-  // ── Traitements actifs ──
-  const todayLog = logsByDate.get(todayStr);
-  const takenMeds = todayLog?.medications.filter((m) => m.taken) ?? [];
-  const activePlans = StorageService.getActivePlansForDate(treatmentPlans, todayStr);
-  const curePlans = activePlans.filter((p) => p.type === 'cure');
-
-  // ── Cycle menstruel ──
-  const logsRecord = Object.fromEntries(logs.map((l) => [l.date, l]));
-  const cycleStatus = getCycleStatus(logsRecord, todayStr, { includeDate: true });
+  const logsRecord = Object.fromEntries(logsByDate);
+  const cycleStatus = getCycleStatus(logsRecord, today, { includeDate: true });
   const cyclePrediction = predictNextPeriod(getPeriods(logsRecord));
 
-  // ── Contrôles à prévoir et rendez-vous planifiés ──
-  // Seules les molécules avec une fréquence de suivi ont un rappel ; affichés à titre indicatif
-  const nextChecks = computeRecheckReminders(labTests, labMarkers, todayStr);
-  const upcoming = checkups.filter((c) => !c.done);
-  const plannedCodes = new Set(upcoming.filter((c) => c.kind === 'blood').flatMap((c) => c.markerCodes));
-  const shownChecks = showAllChecks ? nextChecks : nextChecks.slice(0, NEXT_CHECKS_PREVIEW);
-
-  // ── Graphique chute ──
-  const hairChartData = logs
-    .filter((l) => l.hairLossAmount != null)
-    .slice(-8)
-    .map((l) => ({
-      value: l.hairLossAmount as number,
-      label: l.date.slice(8) + '/' + l.date.slice(5, 7),
-      menstrual: hasFlow(l),
-    }));
+  const week = weekSummary(logs, today);
+  const curePlans = StorageService.getActivePlansForDate(treatmentPlans, today).filter((p) => p.type === 'cure');
+  const agenda = upcomingAgenda(checkups, computeRecheckReminders(labTests, labMarkers, today), today);
 
   return (
     <View style={styles.screen}>
@@ -161,244 +111,36 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Palette.obsidian} />}>
-        {/* Salutation */}
-        <View>
-          <AppText variant="labelMd" color={Palette.textVariant}>
-            Bonjour 👋
-          </AppText>
-          <AppText variant="headlineLg" style={{ marginTop: 4 }}>
-            Comment te sens-tu aujourd&apos;hui ?
-          </AppText>
-        </View>
+        <TodayStatus today={today} logged={!!todayLog} onOpenEntry={() => openEntry()} />
 
-        {!todayLog && (
-          <Card onPress={() => router.push('/entry')} style={styles.ctaCard}>
-            <IconCircle icon={NotebookPen} bg={Palette.lime} color={Palette.obsidian} size={44} />
-            <View style={{ flex: 1 }}>
-              <AppText variant="labelMd">Journée pas encore notée</AppText>
-              <AppText variant="bodySm" color={Palette.textMuted}>
-                Chute, anxiété, compléments… 1 minute suffit.
-              </AppText>
-            </View>
-            <ChevronRight size={20} color={Palette.text} />
-          </Card>
-        )}
+        <KeyMetrics
+          hairLoss={hairLossSummary(logs, today)}
+          lastConflict={findLastConflict(logs, today)}
+          today={today}
+          onOpenConflict={openEntry}
+        />
 
-        {/* Bento duo */}
-        <View style={styles.bento}>
-          <Card
-            dark
-            style={styles.bentoCard}
-            onPress={lastConflict ? () => router.push({ pathname: '/entry', params: { date: lastConflict.date } }) : undefined}>
-            <IconCircle icon={HeartCrack} bg="rgba(224,227,223,0.14)" color={Palette.coralContainer} size={36} />
-            <View style={{ marginTop: 24 }}>
-              <AppText variant="labelSm" color={Palette.obsidianMuted}>
-                Dernière grosse dispute
-              </AppText>
-              <View style={styles.metricRow}>
-                <AppText variant="displayLg" color="#FFFFFF">
-                  {lastConflict ? lastConflict.date.slice(8) + '/' + lastConflict.date.slice(5, 7) : '–'}
-                </AppText>
-              </View>
-              <AppText variant="bodySm" color={Palette.obsidianMuted} style={{ marginTop: 8 }}>
-                {lastConflict ? relativeDays(daysBetween(lastConflict.date, todayStr)) : 'Aucune dispute notée'}
-              </AppText>
-            </View>
-          </Card>
+        <CycleRow status={cycleStatus} prediction={cyclePrediction} onPress={() => openEntry()} />
 
-          <Card style={styles.bentoCard}>
-            <IconCircle icon={Scissors} color={Palette.primary} size={36} />
-            <View style={{ marginTop: 24 }}>
-              <AppText variant="labelSm" color={Palette.textVariant}>
-                Chute estimée / jour
-              </AppText>
-              <View style={styles.metricRow}>
-                <AppText variant="displayLg">{avgLoss !== null ? `~${Math.round(avgLoss)}` : '–'}</AppText>
-              </View>
-              <View style={styles.inlineIcon}>
-                {avgLoss !== null && avgLoss <= 50 ? (
-                  <TrendingDown size={14} color={Palette.primary} />
-                ) : (
-                  <TrendingUp size={14} color={avgLoss !== null ? Palette.coralDeep : Palette.textMuted} />
-                )}
-                <AppText variant="bodySm" color={avgLoss !== null && avgLoss <= 50 ? Palette.primary : Palette.textMuted}>
-                  {lossDays > 0 ? `Sur ${lossDays} jour${lossDays > 1 ? 's' : ''} notés` : 'Aucune saisie'}
-                </AppText>
-              </View>
-            </View>
-          </Card>
-        </View>
+        <HairLossCard points={hairChartPoints(logs)} />
 
-        <CycleRow status={cycleStatus} prediction={cyclePrediction} onPress={() => router.push('/entry')} />
+        <WeekCard week={week} today={today} peakLog={week.peak ? logsByDate.get(week.peak.date) : undefined} />
 
-        {/* Évolution hebdomadaire */}
-        <Card style={{ gap: 16 }}>
-          <View style={styles.rowBetween}>
-            <View style={styles.inlineIconLg}>
-              <IconCircle icon={ChartColumn} size={32} />
-              <AppText variant="headlineSm">Anxiété de la semaine</AppText>
-            </View>
-            <Badge label="7 jours" />
-          </View>
+        <UpcomingSection
+          agenda={agenda}
+          markers={labMarkers}
+          today={today}
+          onSeeAll={openPlanned}
+          onOpenPlanned={openPlanned}
+          onDone={openCompletion}
+          onOpenMarker={(id) => router.push({ pathname: '/marker/[id]', params: { id } })}
+        />
 
-          <View style={styles.bars}>
-            {week.map((d) => {
-              const isPeak = peak?.date === d.date;
-              const isToday = d.date === todayStr;
-              const h = d.score === null ? 44 : 44 + (d.score / 10) * 68;
-              return (
-                <View key={d.date} style={styles.barCol}>
-                  <View
-                    style={[
-                      styles.barTrack,
-                      { height: h },
-                      isPeak && styles.barPeak,
-                      isToday && !isPeak && { backgroundColor: Palette.limeSoft },
-                    ]}>
-                    {d.score !== null && (
-                      <AppText
-                        variant="labelSm"
-                        color={isPeak ? Palette.onCoral : Palette.textMuted}
-                        style={{ fontFamily: Type.labelMd.fontFamily }}>
-                        {d.score}
-                      </AppText>
-                    )}
-                    <View
-                      style={[
-                        styles.barDot,
-                        { backgroundColor: isPeak ? Palette.coralDeep : isToday ? Palette.primary : '#C4C7C2' },
-                        isPeak && { width: 14, height: 14, borderRadius: 7 },
-                      ]}
-                    />
-                  </View>
-                  <AppText
-                    variant="labelSm"
-                    color={isPeak ? Palette.coralDeep : isToday ? Palette.primary : Palette.textVariant}>
-                    {d.label}
-                  </AppText>
-                </View>
-              );
-            })}
-          </View>
-
-          {(peak || conflictDays > 0) && (
-            <View style={styles.insightPill}>
-              <TriangleAlert size={17} color={Palette.coralDeep} />
-              <AppText variant="bodySm" color={Palette.textVariant} style={{ flex: 1 }}>
-                {peak
-                  ? `Pic émotionnel ${dayShort(peak.date).toLowerCase()}. (${peak.score}/10${peakLog?.conflictWithHusband ? ', dispute' : ''
-                  }${peakLog?.hairLossAmount != null ? `, chute ~${peakLog.hairLossAmount}` : ''})`
-                  : `${conflictDays} dispute${conflictDays > 1 ? 's' : ''} de couple cette semaine`}
-              </AppText>
-            </View>
-          )}
-        </Card>
-
-        {/* Cure en cours */}
-        {curePlans.length > 0 && (
-          <View style={{ gap: 8 }}>
-            <View style={[styles.rowBetween, { paddingHorizontal: 4 }]}>
-              <AppText variant="headlineSm">Cure en cours</AppText>
-              <Badge label={`${curePlans.length} active${curePlans.length > 1 ? 's' : ''}`} tone="limeSoft" />
-            </View>
-            {curePlans.map((p) => (
-              <CareRow
-                key={p.id}
-                icon={Clock}
-                iconBg={Palette.containerLow}
-                iconColor={Palette.primary}
-                title={p.name}
-                subtitle={`${p.dosage} · jusqu'au ${frDate(p.endDate ?? '')}`}
-                done={takenMeds.some((m) => m.name.toLowerCase() === p.name.toLowerCase())}
-                onPress={() => router.push('/entry')}
-              />
-            ))}
-          </View>
-        )}
-
-        {/* Rendez-vous planifiés */}
-        {upcoming.length > 0 && (
-          <View style={{ gap: 8 }}>
-            <View style={[styles.rowBetween, { paddingHorizontal: 4 }]}>
-              <AppText variant="headlineSm">Rendez-vous planifiés</AppText>
-              <Badge label={String(upcoming.length)} tone="limeSoft" />
-            </View>
-            {/* Un seul rendez-vous : hors carrousel, la carte est bornée à la largeur de l'écran */}
-            {upcoming.length === 1 ? (
-              <PlannedCard
-                item={upcoming[0]}
-                label={checkupLabel(upcoming[0], labMarkers)}
-                today={todayStr}
-                single
-                onOpen={() => router.push({ pathname: '/analyses', params: { tab: 'planned' } })}
-                onDone={() => openCompletion(upcoming[0])}
-              />
-            ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.carousel}
-                style={styles.carouselBleed}>
-                {upcoming.map((c) => (
-                  <PlannedCard
-                    key={c.id}
-                    item={c}
-                    label={checkupLabel(c, labMarkers)}
-                    today={todayStr}
-                    single={false}
-                    onOpen={() => router.push({ pathname: '/analyses', params: { tab: 'planned' } })}
-                    onDone={() => openCompletion(c)}
-                  />
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        )}
-
-        {/* Contrôles à prévoir (molécules avec fréquence de suivi) */}
-        {nextChecks.length > 0 && (
-          <View style={{ gap: 8 }}>
-            <View style={[styles.rowBetween, { paddingHorizontal: 4 }]}>
-              <AppText variant="headlineSm">Prochaines prises de sang</AppText>
-              <Pressable onPress={() => router.push({ pathname: '/analyses', params: { tab: 'tests' } })} hitSlop={8}>
-                <AppText variant="labelSm" color={Palette.primary}>
-                  Bilans
-                </AppText>
-              </Pressable>
-            </View>
-            {shownChecks.map((r) => (
-              <BloodCheckRow
-                key={r.marker.id}
-                check={r}
-                planned={plannedCodes.has(r.marker.code)}
-                onPress={() => router.push({ pathname: '/marker/[id]', params: { id: r.marker.id } })}
-              />
-            ))}
-            {nextChecks.length > NEXT_CHECKS_PREVIEW && (
-              <ShowMoreToggle
-                expanded={showAllChecks}
-                hiddenCount={nextChecks.length - NEXT_CHECKS_PREVIEW}
-                onToggle={() => setShowAllChecks((v) => !v)}
-              />
-            )}
-          </View>
-        )}
-
-        {/* Graphique chute */}
-        <Card style={{ gap: 12 }}>
-          <View style={styles.rowBetween}>
-            <View style={styles.inlineIconLg}>
-              <IconCircle icon={Sparkles} size={32} color={Palette.primary} bg={Palette.limeSoft} />
-              <AppText variant="headlineSm">Perte de cheveux</AppText>
-            </View>
-            <Badge label="Dernières saisies" />
-          </View>
-          {hairChartData.length > 1 ? (
-            <PillBarChart data={hairChartData} legend />
-          ) : (
-            <EmptyHint text="Renseigne au moins 2 estimations de chute dans le journal pour afficher l'évolution." />
-          )}
-        </Card>
+        <CureSection
+          plans={curePlans}
+          takenToday={todayLog?.medications.filter((m) => m.taken) ?? []}
+          onOpenEntry={() => openEntry()}
+        />
       </ScrollView>
 
       {completing?.item.kind === 'blood' && (
@@ -429,284 +171,6 @@ export default function DashboardScreen() {
   );
 }
 
-/** Accueil pendant le chargement : la structure est affichée, les données sont remplacées par des squelettes. */
-function DashboardSkeleton() {
-  return (
-    <View style={styles.screen}>
-      <ScreenHeader title="Accueil" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={false}>
-        <View>
-          <AppText variant="labelMd" color={Palette.textVariant}>
-            Bonjour 👋
-          </AppText>
-          <AppText variant="headlineLg" style={{ marginTop: 4 }}>
-            Comment te sens-tu aujourd&apos;hui ?
-          </AppText>
-        </View>
-        <View style={styles.bento}>
-          <Card style={[styles.bentoCard, { height: 168, gap: 12, justifyContent: 'flex-start' }]}>
-            <Skeleton width={36} height={36} radius={18} />
-            <Skeleton width="60%" height={34} />
-            <Skeleton width="80%" height={12} />
-          </Card>
-          <Card style={[styles.bentoCard, { height: 168, gap: 12, justifyContent: 'flex-start' }]}>
-            <Skeleton width={36} height={36} radius={18} />
-            <Skeleton width="60%" height={34} />
-            <Skeleton width="80%" height={12} />
-          </Card>
-        </View>
-        <SkeletonCard lines={1} />
-        <Card style={{ gap: 16 }}>
-          <Skeleton width="50%" height={20} />
-          <Skeleton height={120} radius={16} />
-        </Card>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Skeleton width={240} height={150} radius={24} />
-          <Skeleton width={240} height={150} radius={24} />
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-/** Carte de rendez-vous : verte pour un examen, rouge pour une prise de sang. */
-function PlannedCard({
-  item,
-  label,
-  today,
-  single,
-  onOpen,
-  onDone,
-}: {
-  item: PlannedCheckup;
-  label: string;
-  today: string;
-  single: boolean;
-  onOpen: () => void;
-  onDone: () => void;
-}) {
-  const blood = item.kind === 'blood';
-  const fg = blood ? '#FFFFFF' : Palette.obsidian;
-  const muted = blood ? 'rgba(255,255,255,0.85)' : 'rgba(18,22,20,0.7)';
-  const days = daysBetween(today, item.date);
-  const when = days < 0 ? `En retard ${-days} j` : days === 0 ? "Aujourd'hui" : `Dans ${days} j`;
-
-  return (
-    <Pressable
-      onPress={onOpen}
-      style={({ pressed }) => [
-        styles.plannedCard,
-        single && { width: '100%' },
-        { backgroundColor: blood ? Palette.coralDeep : Palette.lime },
-        pressed && { transform: [{ scale: 0.985 }] },
-      ]}>
-      <View style={styles.rowBetween}>
-        {/* <IconCircle
-          icon={blood ? Droplet : ScanLine}
-          size={40}
-          bg={blood ? 'rgba(255,255,255,0.2)' : 'rgba(18,22,20,0.08)'}
-          color={fg}
-        /> */}
-        <View style={{ gap: 2, flex: 1 }}>
-          <AppText variant="labelSm" color={muted}>
-            {blood ? 'Prise de sang' : 'Examen'} · {frDate(item.date)}
-          </AppText>
-          <AppText variant="labelMd" color={fg} style={{ fontSize: 15 }} numberOfLines={3}>
-            {label}
-          </AppText>
-          {item.note ? (
-            <AppText variant="bodySm" color={muted} numberOfLines={1}>
-              {item.note}
-            </AppText>
-          ) : null}
-        </View>
-        <Badge label={when} tone={blood ? 'light' : 'dark'} />
-      </View>
-
-      <Pressable
-        onPress={onDone}
-        accessibilityLabel="C'est fait, saisir le résultat"
-        style={({ pressed }) => [styles.doneBtn, pressed && { opacity: 0.8 }]}>
-        <CircleCheck size={16} color={blood ? Palette.coralDeep : Palette.obsidian} />
-        <AppText variant="labelMd" color={blood ? Palette.coralDeep : Palette.obsidian}>
-          C&apos;est fait
-        </AppText>
-      </Pressable>
-    </Pressable>
-  );
-}
-
-function CareRow({
-  icon,
-  iconBg,
-  iconColor,
-  title,
-  subtitle,
-  done,
-  badge,
-  onPress,
-}: {
-  icon: typeof Pill;
-  iconBg?: string;
-  iconColor?: string;
-  title: string;
-  subtitle: string;
-  done?: boolean;
-  badge?: string;
-  onPress?: () => void;
-}) {
-  return (
-    <Card onPress={onPress} style={styles.careRow}>
-      <IconCircle icon={icon} size={48} bg={iconBg} color={iconColor} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <AppText variant="labelMd" style={{ fontSize: 15 }} numberOfLines={1}>
-          {title}
-        </AppText>
-        <AppText variant="bodySm" color={Palette.textMuted} numberOfLines={1}>
-          {subtitle}
-        </AppText>
-      </View>
-      {badge ? (
-        <Badge label={badge} />
-      ) : (
-        <View style={[styles.checkCircle, done ? { backgroundColor: Palette.lime } : null]}>
-          {done && <Check size={17} color={Palette.onLime} strokeWidth={3} />}
-        </View>
-      )}
-    </Card>
-  );
-}
-
-function BloodCheckRow({
-  check,
-  planned,
-  onPress,
-}: {
-  check: RecheckReminder;
-  planned: boolean;
-  onPress?: () => void;
-}) {
-  const { due, last, months, dueDate, daysLeft, marker, status } = check;
-  const outOfRange = status === 'low' || status === 'high';
-  const fg = due ? '#FFFFFF' : Palette.text;
-  const muted = due ? 'rgba(255,255,255,0.85)' : Palette.textMuted;
-
-  const lastLine = last
-    ? `Dernière : ${last.value} ${marker.unit} le ${frDate(last.date)}${outOfRange ? ' · hors norme' : ''}`
-    : 'Aucun résultat enregistré';
-  const nextLine =
-    dueDate && months !== null
-      ? `${due ? 'Prévue le' : 'Prochaine le'} ${frDate(dueDate)} · tous les ${months} mois`
-      : 'À faire dès que possible';
-  const badge =
-    daysLeft === null
-      ? 'À faire'
-      : daysLeft === 0
-        ? "Aujourd'hui"
-        : daysLeft < 0
-          ? `En retard ${-daysLeft} j`
-          : daysLeft <= 60
-            ? `Dans ${daysLeft} j`
-            : `Dans ${Math.round(daysLeft / 30)} mois`;
-
-  return (
-    <Card onPress={onPress} style={[styles.careRow, due && styles.bloodDue]}>
-      <IconCircle
-        icon={due ? TriangleAlert : Droplet}
-        size={48}
-        bg={due ? 'rgba(255,255,255,0.2)' : Palette.coralSoft}
-        color={due ? '#FFFFFF' : Palette.coralDeep}
-      />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <AppText variant="labelMd" style={{ fontSize: 15 }} color={fg} numberOfLines={1}>
-          {marker.name}
-        </AppText>
-        <AppText variant="bodySm" color={muted} numberOfLines={1}>
-          {lastLine}
-        </AppText>
-        <AppText variant="bodySm" color={muted} numberOfLines={1}>
-          {nextLine}
-        </AppText>
-      </View>
-      <View style={styles.checkBadges}>
-        <Badge label={badge} tone={due ? 'light' : daysLeft !== null && daysLeft <= 14 ? 'amber' : 'neutral'} />
-        {planned && <Badge label="Planifié" tone={due ? 'light' : 'limeSoft'} />}
-      </View>
-    </Card>
-  );
-}
-
-function CycleRow({
-  status,
-  prediction,
-  onPress,
-}: {
-  status: CycleStatus;
-  prediction: CyclePrediction | null;
-  onPress: () => void;
-}) {
-  const range = (p: CyclePrediction) => `Entre le ${frDate(p.windowStart)} et le ${frDate(p.windowEnd)}`;
-  const estimate = prediction?.isEstimate ? ' · estimation' : '';
-
-  let title = 'Cycle menstruel';
-  let subtitle = 'Déclare tes règles depuis le journal pour obtenir une prédiction';
-  let badge: string | undefined;
-  let tone: BadgeTone = 'neutral';
-  switch (status.kind) {
-    case 'ongoing':
-      title = 'Règles en cours';
-      subtitle = prediction ? `Prochaines vers le ${frDate(prediction.nextStart)}${estimate}` : '';
-      badge = `Jour ${status.day}`;
-      tone = 'coralSoft';
-      break;
-    case 'upcoming':
-      title = `Prochaines règles vers le ${frDate(status.prediction.nextStart)}`;
-      subtitle = `${range(status.prediction)}${estimate}`;
-      badge = `Dans ${status.daysUntil} j`;
-      tone = status.daysUntil <= 5 ? 'amber' : 'neutral';
-      break;
-    case 'window':
-      title = 'Règles attendues';
-      subtitle = `${range(status.prediction)}${estimate}`;
-      badge = 'Fenêtre';
-      tone = 'amber';
-      break;
-    case 'late':
-      title = 'Règles en retard';
-      subtitle = `Prévues le ${frDate(status.prediction.nextStart)}${estimate}`;
-      badge = `Retard ${status.daysLate} j`;
-      tone = 'coral';
-      break;
-  }
-
-  return (
-    <Card onPress={onPress} style={styles.careRow}>
-      <IconCircle icon={Droplet} size={48} bg={Palette.raspberrySoft} color={Palette.raspberry} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <AppText variant="labelMd" style={{ fontSize: 15 }} numberOfLines={1}>
-          {title}
-        </AppText>
-        {subtitle ? (
-          <AppText variant="bodySm" color={Palette.textMuted} numberOfLines={2}>
-            {subtitle}
-          </AppText>
-        ) : null}
-      </View>
-      {badge ? <Badge label={badge} tone={tone} /> : <ChevronRight size={20} color={Palette.text} />}
-    </Card>
-  );
-}
-
-function EmptyHint({ text }: { text: string }) {
-  return (
-    <View style={styles.empty}>
-      <AppText variant="bodySm" color={Palette.textMuted} style={{ textAlign: 'center' }}>
-        {text}
-      </AppText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Palette.canvas },
   content: {
@@ -715,82 +179,7 @@ const styles = StyleSheet.create({
     paddingBottom: DockClearance,
     gap: Spacing.lg,
     width: '100%',
-    maxWidth: 640,
+    maxWidth: MaxContentWidth,
     alignSelf: 'center',
-  },
-  ctaCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  bento: { flexDirection: 'row', gap: Spacing.gutter },
-  bentoCard: { flex: 1, padding: 16, justifyContent: 'space-between' },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  metricRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3, marginTop: 2 },
-  inlineIcon: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
-  inlineIconLg: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
-  bars: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    height: 140,
-    paddingHorizontal: 2,
-  },
-  barCol: { alignItems: 'center', gap: 8 },
-  barTrack: {
-    width: 30,
-    borderRadius: 15,
-    backgroundColor: Palette.container,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-  },
-  barPeak: {
-    width: 34,
-    borderRadius: 17,
-    backgroundColor: Palette.coralContainer,
-    shadowColor: Palette.coralDeep,
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  barDot: { width: 10, height: 10, borderRadius: 5 },
-  insightPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: Palette.containerLow,
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  careRow: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 24 },
-  bloodDue: {
-    backgroundColor: Palette.coralDeep,
-    shadowColor: Palette.coralDeep,
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  checkCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Palette.container,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  empty: { paddingVertical: 20, paddingHorizontal: 12 },
-  checkBadges: { alignItems: 'flex-end', gap: 6 },
-  // Le carrousel déborde jusqu'aux bords de l'écran tout en restant aligné sur la marge
-  carouselBleed: { marginHorizontal: -Spacing.margin },
-  carousel: { paddingHorizontal: Spacing.margin, gap: 12, flexGrow: 1 },
-  plannedCard: { width: 250, borderRadius: 24, padding: 16, gap: 12 },
-  doneBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 40,
-    borderRadius: 999,
-    backgroundColor: '#FFFFFF',
   },
 });

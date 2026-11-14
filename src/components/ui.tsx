@@ -27,15 +27,17 @@ export function AppText({
   style,
   children,
   numberOfLines,
+  accessibilityRole,
 }: {
   variant?: TextVariant;
   color?: string;
   style?: StyleProp<TextStyle>;
   children: React.ReactNode;
   numberOfLines?: number;
+  accessibilityRole?: 'header' | 'text';
 }) {
   return (
-    <Text numberOfLines={numberOfLines} style={[Type[variant], { color }, style]}>
+    <Text numberOfLines={numberOfLines} accessibilityRole={accessibilityRole} style={[Type[variant], { color }, style]}>
       {children}
     </Text>
   );
@@ -78,23 +80,35 @@ export function Card({
   style,
   dark,
   onPress,
+  accessibilityLabel,
+  accessibilityHint,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   dark?: boolean;
   onPress?: () => void;
+  /** Lu par le lecteur d'écran à la place du contenu de la carte cliquable. */
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }) {
   const base = [styles.card, dark ? styles.cardDark : null, style];
   if (onPress) {
     return (
       <Pressable
         onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
         style={({ pressed }) => [...base, pressed && { transform: [{ scale: 0.985 }] }]}>
         {children}
       </Pressable>
     );
   }
-  return <View style={base}>{children}</View>;
+  return (
+    <View style={base} accessible={!!accessibilityLabel} accessibilityLabel={accessibilityLabel}>
+      {children}
+    </View>
+  );
 }
 
 // ─── Skeleton (chargement) ──────────────────────────────────────────────────
