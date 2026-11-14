@@ -28,7 +28,7 @@ import {
   normalizeTime,
   shouldShowCycleCard,
 } from '../lib/cycle';
-import { frDate, todayIso } from '../lib/dates';
+import { currentTime, frDate, todayIso } from '../lib/dates';
 import { useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
 import { StorageService } from '../services/storageService';
@@ -65,11 +65,6 @@ const FATIGUE_OPTIONS: { id: FatigueLevel; label: string }[] = [
 
 const SLEEP_QUICK: number[] = [5, 6, 7, 8, 9];
 const CONFLICT_NOTE_MAX_LENGTH = 500;
-
-const currentTime = () => {
-  const now = new Date();
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-};
 
 function cycleSubtitle(status: CycleStatus | null): string {
   if (!status) return '';

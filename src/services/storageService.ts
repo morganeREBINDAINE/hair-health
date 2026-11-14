@@ -359,6 +359,40 @@ export const StorageService = {
     return meds;
   },
 
+  /**
+   * Déclare la fin des règles (`time` « HH:MM ») sur le journal de `date`, sans toucher au reste de la journée.
+   * Sans journal ce jour-là, un journal ne contenant que cette fin est créé. Retourne tous les journaux.
+   */
+  async setPeriodEnd(date: string, time: string): Promise<Record<string, DailyLog>> {
+    const all = await this.getAllDailyLogs();
+    const existing = all[date];
+    const log: DailyLog = existing
+      ? { ...existing, menstrualEndedAt: time }
+      : {
+        date,
+        anxietyScore: null,
+        lumpInThroat: false,
+        conflictWithHusband: false,
+        conflictNote: '',
+        hairLossAmount: null,
+        haircutDone: false,
+        haircutNotes: '',
+        hairWashDone: false,
+        shampooType: null,
+        hennaDone: false,
+        sleepHours: null,
+        fatigueLevel: null,
+        notes: '',
+        medications: [],
+        menstrualFlow: null,
+        menstrualPain: null,
+        menstrualNote: '',
+        menstrualEndedAt: time,
+      };
+    await this.saveDailyLog(log);
+    return this.getAllDailyLogs();
+  },
+
   async saveDailyLog(log: DailyLog): Promise<void> {
     const userId = await getCurrentUserId();
     if (!userId) throw new Error('Non authentifié');

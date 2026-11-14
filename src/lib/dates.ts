@@ -10,6 +10,12 @@ export const MONTHS = [
 
 export const todayIso = () => new Date().toISOString().slice(0, 10);
 
+/** Heure locale actuelle « HH:MM ». */
+export const currentTime = () => {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+};
+
 const parse = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
 export function shiftIso(iso: string, delta: number): string {

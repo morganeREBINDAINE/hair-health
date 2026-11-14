@@ -19,6 +19,28 @@ const between = (logs: DailyLog[], from: string, to: string) => logs.filter((l) 
 const values = (logs: DailyLog[], pick: (l: DailyLog) => number | null | undefined) =>
   logs.map(pick).filter((v): v is number => v != null);
 
+/**
+ * Vrai si la journée a été réellement notée. Un journal créé seulement pour déclarer la fin des
+ * règles (bouton « Règles arrêtées » de l'accueil) ne compte pas.
+ */
+export function isDayLogged(log: DailyLog | undefined): boolean {
+  if (!log) return false;
+  return !!(
+    log.anxietyScore != null ||
+    log.hairLossAmount != null ||
+    log.sleepHours != null ||
+    log.fatigueLevel != null ||
+    log.menstrualFlow != null ||
+    log.lumpInThroat ||
+    log.conflictWithHusband ||
+    log.haircutDone ||
+    log.hairWashDone ||
+    log.hennaDone ||
+    log.notes?.trim() ||
+    log.medications.length > 0
+  );
+}
+
 // ─── Chute de cheveux ───────────────────────────────────────────────────────
 
 export type HairLossSummary = {

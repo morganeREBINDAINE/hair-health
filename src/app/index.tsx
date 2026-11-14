@@ -6,6 +6,7 @@ import { ExamSheet } from '../components/analyses/ExamSheet';
 import { CareSection } from '../components/home/CareSection';
 import { CycleRow } from '../components/home/CycleRow';
 import { DashboardSkeleton } from '../components/home/DashboardSkeleton';
+import { EndPeriodSheet } from '../components/home/EndPeriodSheet';
 import { HairLossCard } from '../components/home/HairLossCard';
 import { KeyMetrics } from '../components/home/KeyMetrics';
 import { TodayStatus } from '../components/home/TodayStatus';
@@ -14,8 +15,9 @@ import { WeekCard } from '../components/home/WeekCard';
 import { ScreenHeader } from '../components/ui';
 import { DockClearance, MaxContentWidth, Palette, Spacing } from '../constants/theme';
 import { getCycleStatus, getPeriods, predictNextPeriod } from '../lib/cycle';
-import { findLastConflict, hairChartPoints, hairLossSummary, lastHairCare, upcomingAgenda, weekSummary } from '../lib/dashboard';
+import { findLastConflict, hairChartPoints, hairLossSummary, isDayLogged, lastHairCare, upcomingAgenda, weekSummary } from '../lib/dashboard';
 import { todayIso } from '../lib/dates';
+import { actionError } from '../lib/errors';
 import { computeRecheckReminders } from '../lib/labStatus';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
@@ -35,6 +37,8 @@ export default function DashboardScreen() {
   // Rendez-vous en cours de saisie (« C'est fait ») ; `session` sert de key au formulaire
   const [completing, setCompleting] = useState<{ item: PlannedCheckup; session: number } | null>(null);
   const [completeSession, setCompleteSession] = useState(0);
+  // Fenêtre « Règles arrêtées » ; la valeur sert de key pour repartir des valeurs par défaut
+  const [endPeriodSession, setEndPeriodSession] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -92,6 +96,17 @@ export default function DashboardScreen() {
   const openEntry = (date?: string) => router.push(date ? { pathname: '/entry', params: { date } } : '/entry');
   const openPlanned = () => router.push({ pathname: '/analyses', params: { tab: 'planned' } });
 
+  const saveEndPeriod = async (date: string, time: string) => {
+    try {
+      const all = await StorageService.setPeriodEnd(date, time);
+      setLogs(Object.values(all).sort((a, b) => a.date.localeCompare(b.date)));
+    } catch (e) {
+      console.error('[accueil] enregistrement fin des règles', e);
+      Toast.error(actionError(e, 'enregistrer la fin des règles'));
+      throw e;
+    }
+  };
+
   const today = todayIso();
   const logsByDate = new Map(logs.map((l) => [l.date, l]));
   const todayLog = logsByDate.get(today);
@@ -111,7 +126,7 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Palette.obsidian} />}>
-        <TodayStatus today={today} logged={!!todayLog} onOpenEntry={() => openEntry()} />
+        <TodayStatus today={today} logged={isDayLogged(todayLog)} onOpenEntry={() => openEntry()} />
 
         <KeyMetrics
           hairLoss={hairLossSummary(logs, today)}
@@ -120,7 +135,12 @@ export default function DashboardScreen() {
           onOpenConflict={openEntry}
         />
 
-        <CycleRow status={cycleStatus} prediction={cyclePrediction} onPress={() => openEntry()} />
+        <CycleRow
+          status={cycleStatus}
+          prediction={cyclePrediction}
+          onPress={() => openEntry()}
+          onEndPeriod={() => setEndPeriodSession((n) => (n ?? 0) + 1)}
+        />
 
         <HairLossCard points={hairChartPoints(logs)} />
 
@@ -145,6 +165,15 @@ export default function DashboardScreen() {
         />
       </ScrollView>
 
+      {endPeriodSession !== null && cycleStatus.kind === 'ongoing' && (
+        <EndPeriodSheet
+          key={endPeriodSession}
+          visible
+          onClose={() => setEndPeriodSession(null)}
+          period={cycleStatus.period}
+          onSave={saveEndPeriod}
+        />
+      )}
       {completing?.item.kind === 'blood' && (
         <BloodTestSheet
           key={completing.session}

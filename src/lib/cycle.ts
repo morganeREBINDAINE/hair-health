@@ -1,7 +1,7 @@
 // Logique du suivi menstruel : reconstitution des périodes et prédiction des prochaines règles.
 // Fonctions pures, sans dépendance UI ni stockage.
 import { CyclePrediction, CycleStatus, DailyLog, Period } from '../types';
-import { daysBetween, shiftIso } from './dates';
+import { daysBetween, frDate, shiftIso } from './dates';
 
 /** Durée de cycle utilisée tant qu'aucun cycle complet n'est enregistré. */
 export const DEFAULT_CYCLE_LENGTH = 30;
@@ -123,4 +123,26 @@ export function shouldShowCycleCard(logs: Record<string, DailyLog>, date: string
 export function normalizeTime(value: string): string | null {
   const m = /^([01]?\d|2[0-3])[:hH]([0-5]\d)$/.exec(value.trim());
   return m ? `${m[1].padStart(2, '0')}:${m[2]}` : null;
+}
+
+export type PeriodEndErrors = { date?: string; time?: string };
+
+/** Contrôle la fin de règles saisie depuis l'accueil pour une période en cours. */
+export function validatePeriodEnd(
+  date: string,
+  time: string,
+  period: Period,
+  today: string,
+  now: string
+): PeriodEndErrors {
+  const errors: PeriodEndErrors = {};
+  if (date > today) errors.date = 'La date ne peut pas être dans le futur.';
+  else if (date < period.lastFlowDay)
+    errors.date = `Tes règles sont notées jusqu'au ${frDate(period.lastFlowDay)} : la fin ne peut pas être avant.`;
+
+  const normalized = normalizeTime(time);
+  if (!time.trim()) errors.time = "Indique l'heure de fin des règles.";
+  else if (!normalized) errors.time = 'Heure invalide, format attendu : 14:30.';
+  else if (date === today && normalized > now) errors.time = "L'heure de fin ne peut pas être dans le futur.";
+  return errors;
 }
