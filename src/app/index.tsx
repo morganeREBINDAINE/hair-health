@@ -9,16 +9,15 @@ import { DashboardSkeleton } from '../components/home/DashboardSkeleton';
 import { EndPeriodSheet } from '../components/home/EndPeriodSheet';
 import { HairLossCard } from '../components/home/HairLossCard';
 import { KeyMetrics } from '../components/home/KeyMetrics';
+import { PlannedSection } from '../components/home/PlannedSection';
 import { SleepCard } from '../components/home/SleepCard';
 import { TodayStatus } from '../components/home/TodayStatus';
-import { UpcomingSection } from '../components/home/UpcomingSection';
 import { ScreenHeader } from '../components/ui';
 import { DockClearance, MaxContentWidth, Palette, Spacing } from '../constants/theme';
 import { getCycleStatus, getPeriods, predictNextPeriod } from '../lib/cycle';
-import { findLastConflict, hairChartPoints, hairLossSummary, isDayLogged, lastHairCare, sleepWeek, upcomingAgenda } from '../lib/dashboard';
+import { findLastConflict, hairChartPoints, hairLossSummary, isDayLogged, lastHairCare, plannedAgenda, sleepWeek } from '../lib/dashboard';
 import { todayIso } from '../lib/dates';
 import { actionError } from '../lib/errors';
-import { computeRecheckReminders } from '../lib/labStatus';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
 import { StorageService } from '../services/storageService';
@@ -116,7 +115,6 @@ export default function DashboardScreen() {
   const cyclePrediction = predictNextPeriod(getPeriods(logsRecord));
 
   const curePlans = StorageService.getActivePlansForDate(treatmentPlans, today).filter((p) => p.type === 'cure');
-  const agenda = upcomingAgenda(checkups, computeRecheckReminders(labTests, labMarkers, today), today);
 
   return (
     <View style={styles.screen}>
@@ -145,14 +143,12 @@ export default function DashboardScreen() {
 
         <SleepCard sleep={sleepWeek(logs, today)} today={today} />
 
-        <UpcomingSection
-          agenda={agenda}
+        <PlannedSection
+          agenda={plannedAgenda(checkups, today)}
           markers={labMarkers}
           today={today}
           onSeeAll={openPlanned}
-          onOpenPlanned={openPlanned}
           onDone={openCompletion}
-          onOpenMarker={(id) => router.push({ pathname: '/marker/[id]', params: { id } })}
         />
 
         <CareSection

@@ -1,47 +1,36 @@
-import { CalendarClock, CircleCheck, Droplet, TriangleAlert } from 'lucide-react-native';
-import { useState } from 'react';
+import { CalendarClock, CircleCheck } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Palette, Spacing } from '../../constants/theme';
-import { HOME_HORIZON_DAYS, type UpcomingAgenda } from '../../lib/dashboard';
+import { HOME_HORIZON_DAYS, type PlannedAgenda } from '../../lib/dashboard';
 import { daysBetween, frDate } from '../../lib/dates';
-import type { RecheckReminder } from '../../lib/labStatus';
 import { LabMarkerDefinition, PlannedCheckup } from '../../types';
 import { checkupLabel } from '../analyses/Planning';
-import { AppText, Badge, Card, IconCircle, ShowMoreToggle } from '../ui';
+import { AppText, Badge, Card, IconCircle } from '../ui';
 import { HomeSection, SectionLink, homeStyles } from './shared';
 
-/** Nombre de prises de sang à prévoir affichées avant « Voir plus ». */
-const CHECKS_PREVIEW = 3;
-
-/** Rendez-vous planifiés et prises de sang à prévoir, en retard ou dans les 30 prochains jours. */
-export function UpcomingSection({
+/** Prises de sang et examens planifiés, en retard ou dans les 30 prochains jours. */
+export function PlannedSection({
   agenda,
   markers,
   today,
   onSeeAll,
-  onOpenPlanned,
   onDone,
-  onOpenMarker,
 }: {
-  agenda: UpcomingAgenda;
+  agenda: PlannedAgenda;
   markers: LabMarkerDefinition[];
   today: string;
+  /** Ouvre l'onglet « Planifiés » des Analyses. */
   onSeeAll: () => void;
-  onOpenPlanned: () => void;
   onDone: (item: PlannedCheckup) => void;
-  onOpenMarker: (markerId: string) => void;
 }) {
-  const [showAllChecks, setShowAllChecks] = useState(false);
-  const { planned, checks, nextLater } = agenda;
-  if (planned.length === 0 && checks.length === 0 && !nextLater) return null;
-
-  const shownChecks = showAllChecks ? checks : checks.slice(0, CHECKS_PREVIEW);
+  const { planned, nextLater } = agenda;
+  if (planned.length === 0 && !nextLater) return null;
 
   return (
     <HomeSection
-      title="À venir"
+      title="Prises de sang et examens planifiés"
       right={<SectionLink label="Tout voir" onPress={onSeeAll} accessibilityLabel="Voir tous les rendez-vous planifiés" />}>
-      {planned.length === 0 && checks.length === 0 && nextLater && (
+      {planned.length === 0 && nextLater && (
         <Card style={homeStyles.itemRow} accessibilityLabel={`Rien dans les ${HOME_HORIZON_DAYS} prochains jours. Prochain le ${frDate(nextLater)}`}>
           <IconCircle icon={CalendarClock} size={48} bg={Palette.limeSoft} color={Palette.primary} />
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -49,7 +38,7 @@ export function UpcomingSection({
               Rien dans les {HOME_HORIZON_DAYS} prochains jours
             </AppText>
             <AppText variant="bodySm" color={Palette.textMuted}>
-              Prochain rendez-vous ou contrôle le {frDate(nextLater)}
+              Prochain rendez-vous le {frDate(nextLater)}
             </AppText>
           </View>
         </Card>
@@ -62,7 +51,7 @@ export function UpcomingSection({
           label={checkupLabel(planned[0], markers)}
           today={today}
           single
-          onOpen={onOpenPlanned}
+          onOpen={onSeeAll}
           onDone={() => onDone(planned[0])}
         />
       ) : planned.length > 1 ? (
@@ -74,23 +63,13 @@ export function UpcomingSection({
               label={checkupLabel(c, markers)}
               today={today}
               single={false}
-              onOpen={onOpenPlanned}
+              onOpen={onSeeAll}
               onDone={() => onDone(c)}
             />
           ))}
         </ScrollView>
       ) : null}
 
-      {shownChecks.map((r) => (
-        <BloodCheckRow key={r.marker.id} check={r} onPress={() => onOpenMarker(r.marker.id)} />
-      ))}
-      {checks.length > CHECKS_PREVIEW && (
-        <ShowMoreToggle
-          expanded={showAllChecks}
-          hiddenCount={checks.length - CHECKS_PREVIEW}
-          onToggle={() => setShowAllChecks((v) => !v)}
-        />
-      )}
     </HomeSection>
   );
 }
@@ -161,66 +140,7 @@ function PlannedCard({
   );
 }
 
-/** Prise de sang à prévoir pour une molécule suivie ; fond rouge quand elle est due. */
-function BloodCheckRow({ check, onPress }: { check: RecheckReminder; onPress: () => void }) {
-  const { due, last, months, dueDate, daysLeft, marker, status } = check;
-  const outOfRange = status === 'low' || status === 'high';
-  const fg = due ? '#FFFFFF' : Palette.text;
-  const muted = due ? 'rgba(255,255,255,0.85)' : Palette.textMuted;
-
-  const lastLine = last
-    ? `Dernière : ${last.value} ${marker.unit} le ${frDate(last.date)}${outOfRange ? ' · hors norme' : ''}`
-    : 'Aucun résultat enregistré';
-  const nextLine =
-    dueDate && months !== null
-      ? `${due ? 'Prévue le' : 'Prochaine le'} ${frDate(dueDate)} · tous les ${months} mois`
-      : 'À faire dès que possible';
-  const badge =
-    daysLeft === null
-      ? 'À faire'
-      : daysLeft === 0
-        ? "Aujourd'hui"
-        : daysLeft < 0
-          ? `En retard ${-daysLeft} j`
-          : `Dans ${daysLeft} j`;
-
-  return (
-    <Card
-      onPress={onPress}
-      style={[homeStyles.itemRow, due && styles.bloodDue]}
-      accessibilityLabel={`Prise de sang ${marker.name}, ${badge.toLowerCase()}. ${lastLine}. ${nextLine}`}
-      accessibilityHint="Ouvre l'évolution de cette molécule">
-      <IconCircle
-        icon={due ? TriangleAlert : Droplet}
-        size={48}
-        bg={due ? 'rgba(255,255,255,0.2)' : Palette.coralSoft}
-        color={due ? '#FFFFFF' : Palette.coralDeep}
-      />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <AppText variant="labelMd" style={homeStyles.itemTitle} color={fg} numberOfLines={1}>
-          {marker.name}
-        </AppText>
-        <AppText variant="bodySm" color={muted} numberOfLines={1}>
-          {lastLine}
-        </AppText>
-        <AppText variant="bodySm" color={muted} numberOfLines={1}>
-          {nextLine}
-        </AppText>
-      </View>
-      <Badge label={badge} tone={due ? 'light' : daysLeft !== null && daysLeft <= 14 ? 'amber' : 'neutral'} />
-    </Card>
-  );
-}
-
 const styles = StyleSheet.create({
-  bloodDue: {
-    backgroundColor: Palette.coralDeep,
-    shadowColor: Palette.coralDeep,
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
   // Le carrousel déborde jusqu'aux bords de l'écran tout en restant aligné sur la marge
   carouselBleed: { marginHorizontal: -Spacing.margin },
   carousel: { paddingHorizontal: Spacing.margin, gap: 12, flexGrow: 1 },

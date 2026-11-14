@@ -4,9 +4,8 @@ import { FATIGUE_OPTIONS } from '../constants/fatigue';
 import { DailyLog, FatigueLevel, PlannedCheckup, ShampooType } from '../types';
 import { hasFlow } from './cycle';
 import { dayShort, daysBetween, shiftIso } from './dates';
-import type { RecheckReminder } from './labStatus';
 
-/** Horizon des rendez-vous et prises de sang affichés dans « À venir ». */
+/** Horizon des rendez-vous planifiés et des molécules à contrôler affichés sur l'accueil. */
 export const HOME_HORIZON_DAYS = 30;
 
 /** Nombre de saisies de chute affichées dans le graphique. */
@@ -142,38 +141,20 @@ export function lastHairCare(logs: DailyLog[], today: string): HairCareHistory {
   };
 }
 
-// ─── À venir ────────────────────────────────────────────────────────────────
+// ─── Rendez-vous planifiés ──────────────────────────────────────────────────
 
-export type UpcomingAgenda = {
+export type PlannedAgenda = {
   /** Rendez-vous non faits, en retard ou dans l'horizon, du plus proche au plus lointain. */
   planned: PlannedCheckup[];
-  /** Prises de sang à prévoir dans l'horizon, hors molécules déjà couvertes par un rendez-vous. */
-  checks: RecheckReminder[];
-  /** Date du premier élément au-delà de l'horizon, null s'il n'y en a pas. */
+  /** Date du premier rendez-vous au-delà de l'horizon, null s'il n'y en a pas. */
   nextLater: string | null;
 };
 
-export function upcomingAgenda(
-  checkups: PlannedCheckup[],
-  reminders: RecheckReminder[],
-  today: string,
-  horizon = HOME_HORIZON_DAYS
-): UpcomingAgenda {
+export function plannedAgenda(checkups: PlannedCheckup[], today: string, horizon = HOME_HORIZON_DAYS): PlannedAgenda {
   const pending = checkups.filter((c) => !c.done).sort((a, b) => a.date.localeCompare(b.date));
-  // Une molécule déjà planifiée n'a pas besoin d'un rappel en plus
-  const plannedCodes = new Set(pending.filter((c) => c.kind === 'blood').flatMap((c) => c.markerCodes));
-  const uncovered = reminders.filter((r) => !plannedCodes.has(r.marker.code));
-
-  const inHorizon = (date: string) => daysBetween(today, date) <= horizon;
-  const later = [
-    ...pending.filter((c) => !inHorizon(c.date)).map((c) => c.date),
-    ...uncovered.filter((r) => r.dueDate && !r.due && !inHorizon(r.dueDate)).map((r) => r.dueDate as string),
-  ].sort();
-
+  const inHorizon = (c: PlannedCheckup) => daysBetween(today, c.date) <= horizon;
   return {
-    planned: pending.filter((c) => inHorizon(c.date)),
-    // Sans date (aucun résultat enregistré) ou en retard : toujours affichée
-    checks: uncovered.filter((r) => r.due || r.dueDate === null || inHorizon(r.dueDate)),
-    nextLater: later[0] ?? null,
+    planned: pending.filter(inHorizon),
+    nextLater: pending.find((c) => !inHorizon(c))?.date ?? null,
   };
 }

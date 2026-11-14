@@ -15,7 +15,7 @@ export function HomeSection({
   return (
     <View style={{ gap: 8 }}>
       <View style={[homeStyles.rowBetween, { paddingHorizontal: 4 }]}>
-        <AppText variant="headlineSm" accessibilityRole="header">
+        <AppText variant="headlineSm" accessibilityRole="header" style={{ flexShrink: 1 }}>
           {title}
         </AppText>
         {right}
