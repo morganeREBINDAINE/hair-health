@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { DailyEntryForm } from '../components/DailyEntryForm';
 import { AppText, Badge, Card, IconCircle, ScreenHeader } from '../components/ui';
@@ -14,13 +14,6 @@ export default function EntryScreen() {
   const [selectedDate, setSelectedDate] = useState<string>(params.date ?? todayStr);
   const [loggedDates, setLoggedDates] = useState<Set<string>>(new Set());
 
-  // Ouverture depuis le calendrier avec une date précise
-  const [lastParamDate, setLastParamDate] = useState(params.date);
-  if (params.date !== lastParamDate) {
-    setLastParamDate(params.date);
-    if (params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date)) setSelectedDate(params.date);
-  }
-
   const loadLogged = useCallback(async () => {
     const all = await StorageService.getAllDailyLogs();
     setLoggedDates(new Set(Object.keys(all)));
@@ -29,7 +22,13 @@ export default function EntryScreen() {
   useFocusEffect(
     useCallback(() => {
       loadLogged();
-    }, [loadLogged])
+      // Ouverture avec une date précise (calendrier, menu +), puis on consomme le paramètre :
+      // une nouvelle ouverture sur la même date doit à nouveau sélectionner ce jour
+      if (params.date) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(params.date)) setSelectedDate(params.date);
+        router.setParams({ date: undefined });
+      }
+    }, [loadLogged, params.date])
   );
 
   // Jours consécutifs saisis jusqu'à aujourd'hui (ou hier si aujourd'hui n'est pas encore noté)

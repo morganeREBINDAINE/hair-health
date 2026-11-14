@@ -100,7 +100,8 @@ export function BottomSheet({
   onClose: () => void;
   title: string;
   subtitle?: string;
-  icon?: LucideIcon;
+  /** `null` : titre affiché sans pastille d'icône. */
+  icon?: LucideIcon | null;
   children: React.ReactNode;
 }) {
   // Animations séparées : le fond sombre apparaît en fondu, seule la fiche glisse depuis le bas
@@ -125,7 +126,7 @@ export function BottomSheet({
           <View style={sharedStyles.grabber} />
           <View style={sharedStyles.rowBetween}>
             <View style={sharedStyles.inlineLg}>
-              <IconCircle icon={icon} size={40} bg={Palette.limeSoft} color={Palette.primary} />
+              {icon && <IconCircle icon={icon} size={40} bg={Palette.limeSoft} color={Palette.primary} />}
               <View style={{ flexShrink: 1 }}>
                 <AppText variant="headlineSm">{title}</AppText>
                 {subtitle ? (
