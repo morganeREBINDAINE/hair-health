@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Calendar } from 'react-native-calendars';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -21,52 +21,45 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 import { Palette, Spacing, DockClearance, Radius, CategoryColors, Type, Elevation } from '../constants/theme';
+import { shampooLabel } from '../constants/hairCare';
 import { StorageService } from '../services/storageService';
-import { DailyLog, LabTest } from '../types';
+import { DailyLog, LabTest, MedicationDefinition } from '../types';
 import { AppText, Badge, Card, Chip, IconCircle, PillButton, ScreenHeader, SkeletonCard } from '../components/ui';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
+import { Toast } from '../lib/toast';
 import { todayIso, shiftIso, dayShort, dayNum, monthTitle, longDay, frDate } from '../lib/dates';
 import { flowLabel, getPeriods, hasMenstrualData, predictNextPeriod } from '../lib/cycle';
+import {
+  CATEGORY_LABELS,
+  CATEGORY_ORDER,
+  PREDICTED_KEY,
+  buildCalendarFilters,
+  categoriesOf,
+  dayDots,
+  dayItems,
+  isShown,
+  medItemKey,
+  type CalendarCategory,
+  type CategoryFilter,
+  type FilterSelection,
+  type SubFilter,
+} from '../lib/calendarFilters';
 import '../lib/calendarLocale';
 
-type Category = 'all' | 'cycle' | 'meds' | 'care' | 'henna' | 'blood' | 'emotion' | 'sleep';
+const CATEGORY_ICONS: Record<CalendarCategory, LucideIcon> = {
+  cycle: Droplet,
+  meds: Pill,
+  hair: Scissors,
+  emotion: Activity,
+  sleep: Moon,
+  blood: Microscope,
+};
 
-const COLOR_LEGEND = [
-  { label: 'Règles', color: CategoryColors.cycle },
-  { label: 'Traitements', color: CategoryColors.meds },
-  { label: 'Soins', color: CategoryColors.wash },
-  { label: 'Henné', color: CategoryColors.henna },
-  { label: 'Émotionnel', color: CategoryColors.stress },
-  { label: 'Sommeil', color: CategoryColors.sleep },
-  { label: 'Bilan sanguin', color: CategoryColors.blood },
+/** Légende de la vue « Tout » : une couleur par catégorie, plus le fond des règles prévues. */
+const CATEGORY_LEGEND: SubFilter[] = [
+  ...CATEGORY_ORDER.map((c) => ({ key: c, label: CATEGORY_LABELS[c].legend, color: CategoryColors[c] })),
+  { key: PREDICTED_KEY, label: 'Règles prévues', color: CategoryColors.cycle, swatch: 'band' },
 ];
-
-const CATEGORIES: { id: Category; label: string; icon?: LucideIcon }[] = [
-  { id: 'all', label: 'Tout' },
-  { id: 'cycle', label: 'Cycle', icon: Droplet },
-  { id: 'meds', label: 'Traitements', icon: Pill },
-  { id: 'care', label: 'Soins', icon: Scissors },
-  { id: 'henna', label: 'Henné', icon: Leaf },
-  { id: 'blood', label: 'Bilan', icon: Microscope },
-  { id: 'emotion', label: 'Émotionnel', icon: Activity },
-  { id: 'sleep', label: 'Fatigue', icon: Moon },
-];
-
-/** Catégories présentes pour une journée — sert aux pastilles et aux cartes. */
-function dayCategories(log: DailyLog | undefined, hasBlood: boolean) {
-  const cats: { key: Exclude<Category, 'all'>; color: string }[] = [];
-  if (hasMenstrualData(log)) cats.push({ key: 'cycle', color: CategoryColors.cycle });
-  if (hasBlood) cats.push({ key: 'blood', color: CategoryColors.blood });
-  if (log?.medications?.some((m) => m.taken)) cats.push({ key: 'meds', color: CategoryColors.meds });
-  if (log && (log.hairWashDone || log.haircutDone || log.hairLossAmount != null))
-    cats.push({ key: 'care', color: CategoryColors.wash });
-  if (log?.hennaDone) cats.push({ key: 'henna', color: CategoryColors.henna });
-  if (log && (log.conflictWithHusband || log.lumpInThroat || (log.anxietyScore ?? 0) >= 5))
-    cats.push({ key: 'emotion', color: CategoryColors.stress });
-  if (log && (log.fatigueLevel === 'importante' || log.fatigueLevel === 'modérée' || log.sleepHours != null))
-    cats.push({ key: 'sleep', color: CategoryColors.sleep });
-  return cats;
-}
 
 /** Délai max entre deux touchers sur le même jour pour un double toucher (ms). */
 const DOUBLE_TAP_DELAY = 300;
@@ -78,9 +71,10 @@ export default function CalendarScreen() {
   const todayStr = todayIso();
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [showMonth, setShowMonth] = useState(false);
-  const [category, setCategory] = useState<Category>('all');
+  const [selection, setSelection] = useState<FilterSelection>({ category: 'all', subKeys: [] });
   const [logs, setLogs] = useState<Record<string, DailyLog>>({});
   const [labTests, setLabTests] = useState<LabTest[]>([]);
+  const [medications, setMedications] = useState<MedicationDefinition[]>([]);
   const initialSyncing = useInitialSyncing();
   const lastMonthTap = useRef<{ iso: string; at: number } | null>(null);
 
@@ -88,8 +82,10 @@ export default function CalendarScreen() {
     try {
       setLogs((await StorageService.getAllDailyLogs()) || {});
       setLabTests((await StorageService.getLabTests()) || []);
+      setMedications((await StorageService.getMedications()) || []);
     } catch (e) {
       console.error('Erreur chargement calendrier:', e);
+      Toast.error('Impossible de charger le calendrier');
     }
   }, []);
 
@@ -102,12 +98,31 @@ export default function CalendarScreen() {
   // Rafraîchi à la fin de chaque synchro cloud
   useEffect(() => SyncEvent.subscribe(() => loadData()), [loadData]);
 
+  const filters = useMemo(() => buildCalendarFilters(medications), [medications]);
+  const subFilters = selection.category === 'all' ? [] : filters.subFilters[selection.category];
+  // Ignore les sous-filtres disparus (ex. traitement masqué depuis sa page détail)
+  const sel: FilterSelection = {
+    category: selection.category,
+    subKeys: selection.subKeys.filter((k) => subFilters.some((f) => f.key === k)),
+  };
+
   const bloodByDate = new Map(labTests.map((t) => [t.date, t]));
   const selectedLog = logs[selectedDate];
   const selectedBlood = bloodByDate.get(selectedDate);
-  const selectedCats = dayCategories(selectedLog, !!selectedBlood);
-  const visible = (c: Exclude<Category, 'all'>) =>
-    (category === 'all' || category === c) && selectedCats.some((x) => x.key === c);
+  const selectedItems = dayItems(selectedLog, !!selectedBlood, filters);
+  const selectedCatCount = categoriesOf(selectedItems).length;
+  const shownItems = selectedItems.filter((i) => isShown(sel, i.category, i.key));
+  const shown = (category: CalendarCategory, key?: string) =>
+    shownItems.some((i) => i.category === category && (key === undefined || i.key === key));
+  const itemColor = (category: CalendarCategory, key: string) =>
+    selectedItems.find((i) => i.category === category && i.key === key)?.color ?? CategoryColors[category];
+
+  const selectCategory = (category: CategoryFilter) => setSelection({ category, subKeys: [] });
+  const toggleSubFilter = (key: string) =>
+    setSelection((s) => ({
+      ...s,
+      subKeys: s.subKeys.includes(key) ? s.subKeys.filter((k) => k !== key) : [...s.subKeys, key],
+    }));
 
   const stripDays = Array.from({ length: 5 }).map((_, i) => shiftIso(selectedDate, i - 2));
 
@@ -124,43 +139,86 @@ export default function CalendarScreen() {
   };
 
   const categoryChips = (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsScroll}>
-      {CATEGORIES.map((c) => (
-        <Chip
-          key={c.id}
-          label={c.label}
-          icon={c.icon}
-          selected={category === c.id}
-          count={c.id === 'all' ? selectedCats.length : undefined}
-          onPress={() => setCategory(c.id)}
-        />
-      ))}
-    </ScrollView>
+    <View style={{ gap: 2 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsScroll}>
+        <Chip label="Tout" selected={sel.category === 'all'} count={selectedCatCount} onPress={() => selectCategory('all')} />
+        {CATEGORY_ORDER.map((c) => (
+          <Chip
+            key={c}
+            label={CATEGORY_LABELS[c].chip}
+            icon={CATEGORY_ICONS[c]}
+            selected={sel.category === c}
+            onPress={() => selectCategory(c)}
+          />
+        ))}
+      </ScrollView>
+      {sel.category !== 'all' && subFilters.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips} style={styles.chipsScroll}>
+          <Chip
+            label="Tous"
+            selected={sel.subKeys.length === 0}
+            onPress={() => setSelection({ category: sel.category, subKeys: [] })}
+            style={styles.subChip}
+          />
+          {subFilters.map((f) => (
+            <Chip
+              key={f.key}
+              label={f.label}
+              dotColor={f.color}
+              selected={sel.subKeys.includes(f.key)}
+              onPress={() => toggleSubFilter(f.key)}
+              style={styles.subChip}
+            />
+          ))}
+        </ScrollView>
+      )}
+      {sel.category === 'meds' && subFilters.length === 0 && (
+        <AppText variant="bodySm" color={Palette.textMuted} style={{ paddingHorizontal: 4, paddingTop: 4 }}>
+          Aucun traitement affiché. Active-les depuis leur page détail dans Paramètres.
+        </AppText>
+      )}
+    </View>
   );
 
-  const colorLegend = (
+  const legendItems = sel.category === 'all' ? CATEGORY_LEGEND : subFilters;
+  const colorLegend = legendItems.length > 0 && (
     <View style={styles.legendRow}>
-      {COLOR_LEGEND.map((item) => (
-        <View key={item.label} style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-          <AppText variant="bodySm" color={Palette.textMuted}>{item.label}</AppText>
-        </View>
-      ))}
+      {legendItems.map((item) => {
+        const dimmed = sel.subKeys.length > 0 && !sel.subKeys.includes(item.key);
+        return (
+          <View key={item.key} style={[styles.legendItem, dimmed && { opacity: 0.35 }]}>
+            <View style={item.swatch === 'band' ? styles.legendBand : [styles.legendDot, { backgroundColor: item.color }]} />
+            <AppText variant="bodySm" color={Palette.textVariant}>
+              {item.label}
+            </AppText>
+          </View>
+        );
+      })}
     </View>
   );
 
   const goToEntry = () => router.push({ pathname: '/entry', params: { date: selectedDate } });
 
-  const takenMeds = selectedLog?.medications.filter((m) => m.taken) ?? [];
+  // Traitements pris et affichés, sans doublon de nom
+  const takenMeds = (selectedLog?.medications ?? []).filter(
+    (m, i, all) =>
+      m.taken &&
+      shown('meds', medItemKey(m.name)) &&
+      all.findIndex((x) => medItemKey(x.name) === medItemKey(m.name)) === i
+  );
+
+  const showPeriod = shown('cycle');
+  const showWash = !!selectedLog?.hairWashDone && shownItems.some((i) => i.key === 'wash' || i.key.startsWith('shampoo:'));
+  const showLoss = shown('hair', 'loss') && selectedLog?.hairLossAmount != null;
 
   // Fenêtre des prochaines règles prévues (jours sans saisie de règles uniquement)
   const prediction = predictNextPeriod(getPeriods(logs));
   const isPredicted = (iso: string) =>
     !!prediction && iso >= prediction.windowStart && iso <= prediction.windowEnd && !hasMenstrualData(logs[iso]);
-  const showPredicted = (category === 'all' || category === 'cycle') && isPredicted(selectedDate);
+  const predictedShown = isShown(sel, 'cycle', PREDICTED_KEY);
+  const showPredicted = predictedShown && isPredicted(selectedDate);
 
-  const anyVisible =
-    showPredicted || (['cycle', 'meds', 'care', 'henna', 'blood', 'emotion', 'sleep'] as const).some(visible);
+  const anyVisible = showPredicted || shownItems.length > 0;
 
   return (
     <View style={styles.screen}>
@@ -189,21 +247,19 @@ export default function CalendarScreen() {
                 <Calendar
                   key={selectedDate.slice(0, 7)}
                   current={selectedDate}
-                    firstDay={1}
+                  firstDay={1}
                   dayComponent={({ date, state }: any) => {
                     if (!date) return null;
                     const iso: string = date.dateString;
                     const isSelected = iso === selectedDate;
                     const isToday = iso === todayStr;
-                    const dots = dayCategories(logs[iso], bloodByDate.has(iso)).filter(
-                      (c) => category === 'all' || c.key === category
-                    );
+                    const dots = dayDots(dayItems(logs[iso], bloodByDate.has(iso), filters), sel);
                     return (
                       <Pressable
                         onPress={(e) => handleMonthDayPress(iso, e.timeStamp)}
                         style={[
                           styles.monthDay,
-                          !isSelected && (category === 'all' || category === 'cycle') && isPredicted(iso) && styles.monthDayPredicted,
+                          !isSelected && predictedShown && isPredicted(iso) && styles.monthDayPredicted,
                           isSelected && styles.monthDaySelected,
                           isToday && !isSelected && styles.monthDayToday,
                         ]}>
@@ -274,7 +330,7 @@ export default function CalendarScreen() {
               <AppText variant="labelMd">{longDay(selectedDate)}</AppText>
             </View>
             <AppText variant="bodySm" color={Palette.textMuted}>
-              {selectedCats.length} enregistrement{selectedCats.length > 1 ? 's' : ''}
+              {selectedCatCount} enregistrement{selectedCatCount > 1 ? 's' : ''}
             </AppText>
           </View>
 
@@ -289,17 +345,16 @@ export default function CalendarScreen() {
             <Card style={styles.emptyCard}>
               <IconCircle icon={CalendarDays} size={48} />
               <AppText variant="bodyMd" color={Palette.textMuted} style={{ textAlign: 'center' }}>
-                {selectedCats.length === 0
+                {selectedItems.length === 0
                   ? 'Aucune donnée enregistrée pour cette date.'
-                  : 'Rien dans cette catégorie ce jour-là.'}
+                  : 'Rien dans cette sélection ce jour-là.'}
               </AppText>
             </Card>
           )}
 
-          {visible('cycle') && selectedLog && (
-            <SmallEventCard
-              icon={Droplet}
-              color={CategoryColors.cycle}
+          {/* Règles : toujours en tête du détail du jour */}
+          {!initialSyncing && showPeriod && selectedLog && (
+            <PeriodBanner
               title={selectedLog.menstrualFlow != null ? 'Règles' : 'Fin des règles'}
               subtitle={[
                 selectedLog.menstrualFlow != null &&
@@ -314,10 +369,9 @@ export default function CalendarScreen() {
             />
           )}
 
-          {showPredicted && prediction && (
-            <SmallEventCard
-              icon={Droplet}
-              color={CategoryColors.cycle}
+          {!initialSyncing && showPredicted && prediction && (
+            <PeriodBanner
+              predicted
               title="Règles prévues"
               subtitle={`Entre le ${frDate(prediction.windowStart)} et le ${frDate(prediction.windowEnd)}${
                 prediction.isEstimate ? ' · estimation' : ''
@@ -326,14 +380,14 @@ export default function CalendarScreen() {
             />
           )}
 
-          {visible('meds') && (
+          {!initialSyncing && takenMeds.length > 0 && (
             <Card style={{ gap: 14 }}>
               <View style={styles.rowBetween}>
                 <View style={styles.inlineLg}>
                   <IconCircle icon={Pill} size={44} bg={Palette.limeSoft} color={Palette.primary} />
                   <View>
                     <AppText variant="headlineSm" style={{ fontSize: 16 }}>
-                      Compléments
+                      Traitements
                     </AppText>
                     <AppText variant="bodySm" color={Palette.textMuted}>
                       {takenMeds.length} produit{takenMeds.length > 1 ? 's' : ''} pris
@@ -345,6 +399,7 @@ export default function CalendarScreen() {
               <View style={styles.wrap}>
                 {takenMeds.map((m) => (
                   <View key={m.name} style={styles.medTag}>
+                    <View style={[styles.legendDot, { backgroundColor: itemColor('meds', medItemKey(m.name)) }]} />
                     <AppText variant="bodySm" color={Palette.textVariant}>
                       {m.name}
                       {m.dosage ? ` · ${m.dosage}` : ''}
@@ -355,7 +410,7 @@ export default function CalendarScreen() {
             </Card>
           )}
 
-          {visible('care') && (selectedLog?.hairWashDone || selectedLog?.hairLossAmount != null) && (
+          {!initialSyncing && (showWash || showLoss) && selectedLog && (
             <Card dark style={{ gap: 16 }}>
               <View style={styles.rowBetween}>
                 <View style={styles.inlineLg}>
@@ -363,19 +418,17 @@ export default function CalendarScreen() {
                   <View style={{ flexShrink: 1 }}>
                     <View style={styles.inline}>
                       <AppText variant="headlineSm" color="#FFFFFF" style={{ fontSize: 16 }}>
-                        {selectedLog?.hairWashDone ? 'Lavage & soin' : 'Chute de cheveux'}
+                        {showWash ? 'Lavage & soin' : 'Chute de cheveux'}
                       </AppText>
-                      {selectedLog?.hairWashDone && <Badge label="Jour J" tone="lime" />}
+                      {showWash && <Badge label="Jour J" tone="lime" />}
                     </View>
                     <AppText variant="bodySm" color={Palette.obsidianMuted}>
-                      {selectedLog?.hairWashDone
-                        ? `Shampoing ${selectedLog.shampooType ? selectedLog.shampooType.replace('_', ' ') : ''}`.trim()
-                        : 'Estimation du jour'}
+                      {showWash ? shampooLabel(selectedLog.shampooType) ?? 'Shampoing' : 'Estimation du jour'}
                     </AppText>
                   </View>
                 </View>
               </View>
-              {selectedLog?.hairLossAmount != null && (
+              {showLoss && selectedLog.hairLossAmount != null && (
                 <View style={styles.darkFooter}>
                   <View style={styles.inline}>
                     <Hash size={15} color={Palette.obsidianMuted} />
@@ -393,7 +446,7 @@ export default function CalendarScreen() {
             </Card>
           )}
 
-          {visible('emotion') && selectedLog && (
+          {!initialSyncing && shown('emotion') && selectedLog && (
             <Card style={[styles.coralCard, { gap: 12 }]}>
               <View style={styles.rowBetween}>
                 <View style={styles.inlineLg}>
@@ -439,21 +492,27 @@ export default function CalendarScreen() {
             </Card>
           )}
 
-          {visible('henna') && (
-            <SmallEventCard icon={Leaf} color={CategoryColors.henna} title="Soin henné" subtitle="Gaine kératine" badge="Fait" />
+          {!initialSyncing && shown('hair', 'henna') && (
+            <SmallEventCard
+              icon={Leaf}
+              color={itemColor('hair', 'henna')}
+              title="Soin henné"
+              subtitle="Gaine kératine"
+              badge="Fait"
+            />
           )}
 
-          {visible('care') && selectedLog?.haircutDone && (
+          {!initialSyncing && shown('hair', 'haircut') && selectedLog && (
             <SmallEventCard
               icon={Scissors}
-              color={CategoryColors.haircut}
+              color={itemColor('hair', 'haircut')}
               title="Coupe de cheveux"
               subtitle={selectedLog.haircutNotes || 'Coupe effectuée'}
               badge="Fait"
             />
           )}
 
-          {visible('sleep') && selectedLog && (
+          {!initialSyncing && shown('sleep') && selectedLog && (
             <SmallEventCard
               icon={Moon}
               color={CategoryColors.sleep}
@@ -468,7 +527,7 @@ export default function CalendarScreen() {
             />
           )}
 
-          {visible('blood') && selectedBlood && (
+          {!initialSyncing && shown('blood') && selectedBlood && (
             <SmallEventCard
               icon={Microscope}
               color={CategoryColors.blood}
@@ -498,6 +557,40 @@ function RoundButton({ icon: Icon, onPress, active }: { icon: LucideIcon; onPres
       ]}>
       <Icon size={19} color={active ? '#FFFFFF' : Palette.text} />
     </Pressable>
+  );
+}
+
+/** Encart des règles (réelles ou prévues), sur fond rouge clair, en tête du détail du jour. */
+function PeriodBanner({
+  title,
+  subtitle,
+  badge,
+  predicted,
+}: {
+  title: string;
+  subtitle: string;
+  badge: string;
+  predicted?: boolean;
+}) {
+  return (
+    <View style={[styles.periodBanner, predicted && styles.periodBannerPredicted]}>
+      <IconCircle icon={Droplet} size={44} color={Palette.menstrual} bg={Palette.card} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <AppText variant="labelMd" color={Palette.menstrualDeep} style={{ fontSize: 15 }}>
+          {title}
+        </AppText>
+        {!!subtitle && (
+          <AppText variant="bodySm" color={Palette.menstrualDeep}>
+            {subtitle}
+          </AppText>
+        )}
+      </View>
+      <View style={styles.periodBadge}>
+        <AppText variant="labelSm" color={Palette.menstrualDeep}>
+          {badge}
+        </AppText>
+      </View>
+    </View>
   );
 }
 
@@ -574,8 +667,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
-  dot: { width: 5, height: 5, borderRadius: 3 },
-  dotsRow: { flexDirection: 'row', gap: 2, height: 6, marginTop: 2 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  dotsRow: { flexDirection: 'row', gap: 2, height: 8, marginTop: 2 },
   monthDay: {
     width: 40,
     height: 46,
@@ -584,13 +677,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   monthDaySelected: { backgroundColor: Palette.lime },
-  monthDayPredicted: { backgroundColor: Palette.raspberrySoft },
+  monthDayPredicted: { backgroundColor: Palette.menstrualSoft },
   monthDayToday: { borderWidth: 1.5, borderColor: Palette.obsidian },
   chipsScroll: { marginHorizontal: -Spacing.margin },
   chips: { gap: 8, paddingHorizontal: Spacing.margin, paddingVertical: 6 },
+  subChip: { height: 34, paddingHorizontal: 12 },
   emptyCard: { alignItems: 'center', gap: 12, paddingVertical: 28 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   medTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: Palette.containerLow,
     borderRadius: Radius.full,
     paddingHorizontal: 12,
@@ -617,5 +714,29 @@ const styles = StyleSheet.create({
   smallCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: Radius.lg },
   legendRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 4 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendBand: {
+    width: 18,
+    height: 10,
+    borderRadius: 3,
+    backgroundColor: Palette.menstrualSoft,
+    borderWidth: 1,
+    borderColor: Palette.menstrual,
+    borderStyle: 'dashed',
+  },
+  periodBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: Radius.lg,
+    backgroundColor: Palette.menstrualSoft,
+  },
+  periodBannerPredicted: { borderWidth: 1, borderColor: Palette.menstrual, borderStyle: 'dashed' },
+  periodBadge: {
+    backgroundColor: Palette.card,
+    borderRadius: Radius.full,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
 });

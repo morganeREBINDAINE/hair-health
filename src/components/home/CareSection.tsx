@@ -1,7 +1,7 @@
 import { Check, Clock, Droplets, Leaf, Scissors, type LucideIcon } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 import { shampooLabel } from '../../constants/hairCare';
-import { CategoryColors, Palette, Radius } from '../../constants/theme';
+import { HairItemColors, Palette, Radius } from '../../constants/theme';
 import type { HairCareHistory } from '../../lib/dashboard';
 import { daysBetween, frDate, relativeDays } from '../../lib/dates';
 import { DailyMedicationItem, TreatmentPlan } from '../../types';
@@ -36,9 +36,9 @@ export function CareSection({
       }>
       {hasHairCare && (
         <Card style={styles.careCard}>
-          <CareTile icon={Droplets} color={CategoryColors.wash} label="Lavage" value={ago(wash?.date ?? null)} detail={wash ? shampooLabel(wash.shampoo) : null} />
-          <CareTile icon={Leaf} color={CategoryColors.henna} label="Henné" value={ago(henna)} />
-          <CareTile icon={Scissors} color={CategoryColors.haircut} label="Coupe" value={ago(haircut)} />
+          <CareTile icon={Droplets} color={HairItemColors.wash} label="Lavage" value={ago(wash?.date ?? null)} detail={wash ? shampooLabel(wash.shampoo) : null} />
+          <CareTile icon={Leaf} color={HairItemColors.henna} label="Henné" value={ago(henna)} />
+          <CareTile icon={Scissors} color={HairItemColors.haircut} label="Coupe" value={ago(haircut)} />
         </Card>
       )}
 

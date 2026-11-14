@@ -15,6 +15,8 @@ export interface MedicationDefinition {
   isActive: boolean;
   category: 'supplement' | 'medication';
   displayOrder: number;
+  /** Proposé comme sous-filtre du calendrier (absent des caches antérieurs = affiché). */
+  showInCalendar?: boolean;
 }
 
 export type FatigueLevel = 'normal' | 'légère' | 'modérée' | 'importante';

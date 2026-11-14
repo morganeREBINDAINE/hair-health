@@ -33,6 +33,7 @@ create table if not exists public.medication_definitions (
   is_active boolean default true,
   category text default 'supplement', -- 'supplement', 'medication'
   display_order int default 0,
+  show_in_calendar boolean not null default true, -- sous-filtre du calendrier
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
 

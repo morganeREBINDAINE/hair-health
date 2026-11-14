@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { SyncEvent, useInitialSyncing } from '../lib/syncEvent';
 import { Toast } from '../lib/toast';
 import { View, StyleSheet, ScrollView, Alert, TextInput, Pressable, Modal, KeyboardAvoidingView, Platform } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import {
   FileSpreadsheet,
   Share2,
@@ -23,6 +23,7 @@ import {
   X,
   Syringe,
   Droplet,
+  ChevronRight,
 } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 import { MedicationDefinition, TreatmentPlan, TreatmentType, LabMarkerDefinition } from '../types';
@@ -347,7 +348,14 @@ export default function SettingsScreen() {
               return (
                 <View key={med.id} style={styles.medRow}>
                   <View style={{ flex: 1, gap: 4 }}>
-                    <AppText variant="labelMd">{med.name}</AppText>
+                    <Pressable
+                      onPress={() => router.push({ pathname: '/medication/[id]', params: { id: med.id } })}
+                      hitSlop={4}
+                      accessibilityLabel={`Détail de ${med.name}`}
+                      style={({ pressed }) => [styles.medName, pressed && { opacity: 0.6 }]}>
+                      <AppText variant="labelMd" style={{ flexShrink: 1 }}>{med.name}</AppText>
+                      <ChevronRight size={15} color={Palette.textMuted} />
+                    </Pressable>
                     {isEditing ? (
                       <View style={styles.editRow}>
                         <TextInput style={[inputStyle, styles.dosageInput]} value={editDosage} onChangeText={setEditDosage} placeholder="Dosage" placeholderTextColor={Palette.textMuted} autoFocus />
@@ -598,6 +606,7 @@ const styles = StyleSheet.create({
   },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   flatChip: { backgroundColor: Palette.containerLow, shadowOpacity: 0, elevation: 0 },
+  medName: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' },
   medRow: {
     flexDirection: 'row',
     alignItems: 'center',

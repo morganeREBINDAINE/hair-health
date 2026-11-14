@@ -52,21 +52,45 @@ export const Palette = {
   raspberrySoft: '#FBE3EC',
   menstrual: '#D32F2F',
   menstrualDeep: '#9A1B1B',
+  menstrualSoft: '#FDECEC',
 
   error: '#BA1A1A',
 } as const;
 
-/** Couleurs des catégories d'événements (calendrier, pastilles). */
+/**
+ * Couleurs des catégories d'événements (calendrier, pastilles, légende).
+ * Teintes vives et bien séparées pour rester lisibles en petites pastilles.
+ */
 export const CategoryColors = {
-  blood: Palette.coralDeep,
-  henna: '#C98A1A',
-  wash: '#3E8E7E',
-  stress: Palette.coral,
-  meds: Palette.primary,
-  haircut: '#5B5F5B',
-  sleep: '#5C6BC0',
-  cycle: Palette.raspberry,
+  cycle: '#E5484D',
+  meds: '#30A46C',
+  hair: '#12A594',
+  emotion: '#F76B15',
+  sleep: '#8E4EC6',
+  blood: '#0090FF',
 } as const;
+
+/** Couleurs des éléments « Cheveux » (légende du calendrier, tuiles de l'accueil). */
+export const HairItemColors = {
+  wash: '#0090FF',
+  loss: '#D6409F',
+  haircut: '#AD7F58',
+  henna: '#F76B15',
+} as const;
+
+/** Palette des sous-éléments d'une catégorie (traitements, types de soin…), attribuée dans l'ordre. */
+export const SubItemColors = [
+  '#0090FF',
+  '#F76B15',
+  '#30A46C',
+  '#8E4EC6',
+  '#E5484D',
+  '#12A594',
+  '#D6409F',
+  '#FFB224',
+  '#3E63DD',
+  '#AD7F58',
+] as const;
 
 // Compatibilité avec use-theme.ts
 export const Colors = {

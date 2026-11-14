@@ -290,6 +290,7 @@ export function Chip({
   onPress,
   icon: Icon,
   count,
+  dotColor,
   style,
 }: {
   label: string;
@@ -297,6 +298,8 @@ export function Chip({
   onPress?: () => void;
   icon?: LucideIcon;
   count?: number;
+  /** Pastille de couleur avant le libellé (ex. couleur de légende). */
+  dotColor?: string;
   style?: StyleProp<ViewStyle>;
 }) {
   const fg = selected ? '#FFFFFF' : Palette.text;
@@ -310,6 +313,7 @@ export function Chip({
         style,
       ]}>
       {Icon && <Icon size={14} color={selected ? Palette.lime : Palette.textMuted} />}
+      {dotColor && <View style={[styles.chipDot, { backgroundColor: dotColor }]} />}
       <Text style={[Type.labelMd, { color: fg }]}>{label}</Text>
       {count !== undefined && (
         <View style={[styles.chipCount, { backgroundColor: selected ? Palette.lime : Palette.container }]}>
@@ -581,6 +585,7 @@ const styles = StyleSheet.create({
   },
   chipIdle: { backgroundColor: Palette.card, ...Elevation.card, elevation: 1 },
   chipSelected: { backgroundColor: Palette.obsidian },
+  chipDot: { width: 10, height: 10, borderRadius: 5 },
   showMore: {
     flexDirection: 'row',
     alignItems: 'center',

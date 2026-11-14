@@ -201,6 +201,7 @@ export const StorageService = {
       isActive: true,
       category: 'supplement',
       displayOrder: meds.length + 1,
+      showInCalendar: true,
     };
 
     const { data: inserted, error } = await supabase.from('medication_definitions').insert({
@@ -265,6 +266,26 @@ export const StorageService = {
     if (error) throw error;
 
     const updated = meds.map((m) => m.id === id ? { ...m, isPrechecked: newValue } : m);
+    await AsyncStorage.setItem(KEYS.MEDICATIONS, JSON.stringify(updated));
+    return updated;
+  },
+
+  /** Active ou retire un traitement des sous-filtres du calendrier (cloud d'abord, cache ensuite). */
+  async setMedicationShowInCalendar(id: string, value: boolean): Promise<MedicationDefinition[]> {
+    const userId = await getCurrentUserId();
+    if (!userId) throw new Error('Non authentifié');
+
+    const { data, error } = await supabase.from('medication_definitions')
+      .update({ show_in_calendar: value })
+      .eq('id', id).eq('user_id', userId)
+      .select('id');
+
+    if (error) throw error;
+    // Aucune ligne modifiée : le traitement n'existe plus côté cloud
+    if (!data || data.length === 0) throw new Error('Traitement introuvable');
+
+    const meds = await this.getMedications();
+    const updated = meds.map((m) => m.id === id ? { ...m, showInCalendar: value } : m);
     await AsyncStorage.setItem(KEYS.MEDICATIONS, JSON.stringify(updated));
     return updated;
   },
@@ -875,6 +896,7 @@ export const StorageService = {
       isActive: m.is_active ?? true,
       category: m.category ?? 'supplement',
       displayOrder: m.display_order ?? 0,
+      showInCalendar: m.show_in_calendar ?? true,
     }));
     await AsyncStorage.setItem(KEYS.MEDICATIONS, JSON.stringify(medications));
     synced += medications.length;

@@ -388,6 +388,11 @@ function AppRoot() {
         name="marker/[id]"
         options={{ href: null, headerShown: false }}
       />
+      {/* Route cachée : détail d'un traitement, ouverte depuis Paramètres */}
+      <Tabs.Screen
+        name="medication/[id]"
+        options={{ href: null, headerShown: false }}
+      />
       {/* Route cachée : pas d'onglet, juste une page de callback OAuth */}
       <Tabs.Screen
         name="auth/callback"
