@@ -298,20 +298,6 @@ export function DateField({
   );
 }
 
-/** Bouton pointillé « + Ajouter … » en bas de liste. */
-export function AddRow({ label, icon: Icon, onPress }: { label: string; icon: LucideIcon; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [sharedStyles.addRow, pressed && { transform: [{ scale: 0.98 }] }]}>
-      <View style={sharedStyles.addIcon}>
-        <Icon size={18} color={Palette.obsidian} strokeWidth={2.6} />
-      </View>
-      <AppText variant="labelMd">{label}</AppText>
-    </Pressable>
-  );
-}
-
 export const sharedStyles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.margin,

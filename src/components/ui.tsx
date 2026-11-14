@@ -464,8 +464,13 @@ export function Segmented<T extends string>({
               onPress={() => onChange(o.id)}
               accessibilityRole="tab"
               accessibilityState={{ selected: active }}
-              style={[styles.segmentOutline, i > 0 && styles.segmentOutlineDivider, active && styles.segmentOutlineActive]}>
-              <Text style={[Type.labelMd, { color: active ? Palette.primary : Palette.textVariant }]} numberOfLines={1}>
+              style={[
+                styles.segmentOutline,
+                i === 0 && styles.segmentOutlineFirst,
+                i === options.length - 1 && styles.segmentOutlineLast,
+                active && styles.segmentOutlineActive,
+              ]}>
+              <Text style={[Type.labelMd, { color: active ? Palette.obsidian : Palette.textVariant }]} numberOfLines={1}>
                 {o.label}
               </Text>
             </Pressable>
@@ -673,18 +678,21 @@ const styles = StyleSheet.create({
   },
   segmentLg: { paddingHorizontal: 18, paddingVertical: 10 },
   segmentActive: { backgroundColor: Palette.obsidian },
-  segmentedOutline: {
-    flexDirection: 'row',
-    height: 48,
-    borderRadius: Radius.md,
+  // Chaque partie porte son propre contour : la partie active, sur fond vert, n'en a pas
+  segmentedOutline: { flexDirection: 'row', height: 48 },
+  segmentOutline: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    backgroundColor: Palette.card,
     borderWidth: 1,
     borderColor: Palette.outlineVariant,
-    backgroundColor: Palette.card,
-    overflow: 'hidden',
+    marginLeft: -1,
   },
-  segmentOutline: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  segmentOutlineDivider: { borderLeftWidth: 1, borderLeftColor: Palette.outlineVariant },
-  segmentOutlineActive: { backgroundColor: Palette.limeSoft },
+  segmentOutlineFirst: { marginLeft: 0, borderTopLeftRadius: Radius.md, borderBottomLeftRadius: Radius.md },
+  segmentOutlineLast: { borderTopRightRadius: Radius.md, borderBottomRightRadius: Radius.md },
+  segmentOutlineActive: { backgroundColor: Palette.lime, borderColor: Palette.lime, zIndex: 1 },
   // Marge verticale : laisse de la place à l'ombre des cartes, sinon rognée par le ScrollView
   imageTabs: { flexDirection: 'row', gap: 8, paddingVertical: 6 },
   imageTab: {

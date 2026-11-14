@@ -16,6 +16,7 @@ import { ExamsTab } from '../components/analyses/ExamsTab';
 import { PlannedTab } from '../components/analyses/PlannedTab';
 import { BloodTestSheet } from '../components/analyses/BloodTestSheet';
 import { ExamSheet } from '../components/analyses/ExamSheet';
+import { MarkerSheet } from '../components/analyses/MarkerSheet';
 import { PlanningSheet, checkupLabel } from '../components/analyses/Planning';
 
 type AnalysesTab = 'molecules' | 'tests' | 'exams';
@@ -48,6 +49,8 @@ const FAB_LABEL: Record<'tests' | 'exams', Record<SubView, string>> = {
 
 /** Hauteur du dock de navigation flottant (bouton 48 + padding 2 × 5), voir `_layout.tsx`. */
 const DOCK_HEIGHT = 58;
+/** Espace entre le dock et le bouton flottant d'ajout. */
+const FAB_GAP = 24;
 
 /** Formulaire ouvert : `session` sert de `key` pour repartir d'un état vierge à chaque ouverture. */
 type SheetState<T> = { session: number; editing: T | null; fromPlan: PlannedCheckup | null };
@@ -68,6 +71,7 @@ export default function AnalysesScreen() {
   const [session, setSession] = useState(0);
   const [bloodSheet, setBloodSheet] = useState<SheetState<LabTest> | null>(null);
   const [examSheet, setExamSheet] = useState<SheetState<MedicalExam> | null>(null);
+  const [markerSheet, setMarkerSheet] = useState<number | null>(null);
   const [planSheet, setPlanSheet] = useState<{ session: number; kind: CheckupKind; editing: PlannedCheckup | null } | null>(
     null,
   );
@@ -158,7 +162,9 @@ export default function AnalysesScreen() {
   const subTab = activeTab === 'molecules' ? null : activeTab;
   const view = subTab ? views[subTab] : null;
 
+  const fabLabel = subTab && view ? FAB_LABEL[subTab][view] : 'Ajouter une molécule';
   const onFabPress = () => {
+    if (!subTab) return setMarkerSheet(nextSession());
     if (subTab === 'tests') return view === 'planned' ? openPlan('blood') : openBlood(null);
     if (subTab === 'exams') return view === 'planned' ? openPlan('exam') : openExam(null);
   };
@@ -186,7 +192,7 @@ export default function AnalysesScreen() {
         )}
       </View>
       <ScrollView
-        contentContainerStyle={[sharedStyles.content, subTab && styles.contentWithFab]}
+        contentContainerStyle={[sharedStyles.content, styles.contentWithFab]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
         {activeTab === 'molecules' &&
@@ -228,13 +234,21 @@ export default function AnalysesScreen() {
         )}
       </ScrollView>
 
-      {subTab && view && (
-        <PillButton
-          label={FAB_LABEL[subTab][view]}
-          variant="lime"
-          disabled={loading}
-          onPress={onFabPress}
-          style={[styles.fab, { bottom: Math.max(insets.bottom, 12) + DOCK_HEIGHT + 14 }]}
+      <PillButton
+        label={fabLabel}
+        variant="lime"
+        disabled={loading}
+        onPress={onFabPress}
+        style={[styles.fab, { bottom: Math.max(insets.bottom, 12) + DOCK_HEIGHT + FAB_GAP }]}
+      />
+
+      {markerSheet !== null && (
+        <MarkerSheet
+          key={markerSheet}
+          visible
+          onClose={() => setMarkerSheet(null)}
+          markers={markers}
+          onMarkersChange={setMarkers}
         />
       )}
 
@@ -290,6 +304,6 @@ const styles = StyleSheet.create({
   tabsBleed: { marginHorizontal: -Spacing.margin },
   tabsContent: { paddingHorizontal: Spacing.margin },
   // Le bouton flottant ne doit pas masquer la dernière carte
-  contentWithFab: { paddingBottom: DockClearance + 64 },
+  contentWithFab: { paddingBottom: DockClearance + 64 + FAB_GAP },
   fab: { position: 'absolute', right: Spacing.margin, height: 62, paddingHorizontal: 28, ...Elevation.floating },
 });
